@@ -14,6 +14,29 @@ from msrestazure.tools import parse_resource_id
 TEST_DIR = os.path.abspath(os.path.join(os.path.abspath(__file__), '..'))
 
 class ContainerappIdentityTests(ScenarioTest):
+
+    @AllowLargeResponse(8192)
+    @ResourceGroupPreparer(location="eastus2")
+    def test_xinyu2(self, resource_group):
+        from azext_containerapp import _utils
+        custom_location = '/subscriptions/23f95f0e-e782-47be-9f97-56035ec10e42/resourcegroups/xinyu6/providers/microsoft.extendedlocation/customlocations/xinyu6-2-location'
+        cluster_id = '/subscriptions/23f95f0e-e782-47be-9f97-56035ec10e42/resourceGroups/xinyu6/providers/Microsoft.Kubernetes/connectedClusters/xinyu6-connectedcluster'
+
+        _utils._validate_custom_loc_and_location(self, custom_location=custom_location)
+        _utils._validate_custom_loc_and_location(self, custom_location=custom_location, connected_cluster_id=cluster_id)
+
+
+    @AllowLargeResponse(8192)
+    @ResourceGroupPreparer(location="eastus2")
+    def test_xinyu(self, resource_group):
+        from azext_containerapp import _utils
+        custom_location='/subscriptions/23f95f0e-e782-47be-9f97-56035ec10e42/resourcegroups/xinyu6/providers/microsoft.extendedlocation/customlocations/xinyu6-2-location'
+        cluster_id = '/subscriptions/23f95f0e-e782-47be-9f97-56035ec10e42/resourceGroups/xinyu6/providers/Microsoft.Kubernetes/connectedClusters/xinyu6-connectedcluster'
+
+        _utils._get_cluster_extension(self, cluster_extension_id='/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/xinyu6/providers/Microsoft.Kubernetes/connectedClusters/xinyu6-connectedcluster/providers/Microsoft.KubernetesConfiguration/extensions/xinyu6-app-ext')
+        _utils._list_cluster_extensions(self, connected_cluster_id=cluster_id)
+
+
     @AllowLargeResponse(8192)
     @ResourceGroupPreparer(location="eastus2")
     @live_only()  # encounters 'CannotOverwriteExistingCassetteException' only when run from recording (passes when run live)

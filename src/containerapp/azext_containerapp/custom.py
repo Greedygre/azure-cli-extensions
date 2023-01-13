@@ -2469,7 +2469,10 @@ def containerapp_up(cmd,
                     context_path=None,
                     service_principal_client_id=None,
                     service_principal_client_secret=None,
-                    service_principal_tenant_id=None):
+                    service_principal_tenant_id=None,
+                    custom_location=None,
+                    cluster_extension_id=None,
+                    connected_cluster_id=None):
     from ._up_utils import (_validate_up_args, _reformat_image, _get_dockerfile_content, _get_ingress_and_target_port,
                             ResourceGroup, ContainerAppEnvironment, ContainerApp, _get_registry_from_app,
                             _get_registry_details, _create_github_action, _set_up_defaults, up_output,

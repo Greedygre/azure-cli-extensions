@@ -26,6 +26,7 @@ from ._constants import (MAXIMUM_CONTAINER_APP_NAME_LENGTH, SHORT_POLLING_INTERV
                          LOG_ANALYTICS_RP, CONTAINER_APPS_RP, CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, ACR_IMAGE_SUFFIX,
                          CONNECTED_ENV_CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE)
 from ._models import (ContainerAppCustomDomainEnvelope as ContainerAppCustomDomainEnvelopeModel)
+from ._client_factory import k8s_extension_client_factory
 
 logger = get_logger(__name__)
 
@@ -1441,10 +1442,35 @@ def set_managed_identity(cmd, resource_group_name, containerapp_def, system_assi
                 containerapp_def["identity"]["userAssignedIdentities"][r] = {}
 
 
-def _validate_custom_loc_and_location(cmd, custom_location):
+def _validate_custom_loc_and_location(cmd, custom_location, cluster_extension_id=None, connected_cluster_id=None):
     from ._client_factory import customlocation_client_factory
     parsed_custom_loc = parse_resource_id(custom_location)
     custom_loc_name = parsed_custom_loc["name"]
     custom_loc_rg = parsed_custom_loc["resource_group"]
     r = customlocation_client_factory(cmd.cli_ctx).custom_locations.get(resource_group_name=custom_loc_rg, resource_name=custom_loc_name)
+    if connected_cluster_id:
+        print(r.host_resource_id)
+        if connected_cluster_id != r.host_resource_id:
+            raise ResourceNotFoundError('Custom location {} is not in cluster {}.'.format(custom_location, connected_cluster_id))
     return r.location
+
+def _get_cluster_extension(cmd, cluster_extension_id=None):
+    parsed_extension = parse_resource_id(cluster_extension_id)
+    cluster_rg = parsed_extension["resource_group"]
+    cluster_rp = parsed_extension["namespace"]
+    cluster_type = parsed_extension["type"]
+    cluster_name = parsed_extension["name"]
+    return k8s_extension_client_factory(cmd.cli_ctx).get(resource_group_name=cluster_rg, cluster_rp=cluster_rp, cluster_resource_name=cluster_type, cluster_name=cluster_name,extension_name='xinyu6-app-ext')
+
+def _list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id=None):
+    if connected_cluster_id:
+        parsed_extension = parse_resource_id(connected_cluster_id)
+    elif cluster_extension_id:
+        parsed_extension = parse_resource_id(cluster_extension_id)
+
+    cluster_rg = parsed_extension["resource_group"]
+    cluster_rp = parsed_extension["namespace"]
+    cluster_type = parsed_extension["type"]
+    cluster_name = parsed_extension["name"]
+    extension_list = k8s_extension_client_factory(cmd.cli_ctx).list(resource_group_name=cluster_rg, cluster_rp=cluster_rp, cluster_resource_name=cluster_type, cluster_name=cluster_name)
+    return extension_list

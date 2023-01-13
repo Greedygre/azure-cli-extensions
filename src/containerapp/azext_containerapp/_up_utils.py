@@ -25,7 +25,7 @@ from knack.log import get_logger
 
 from msrestazure.tools import parse_resource_id, is_valid_resource_id, resource_id
 
-from ._clients import ManagedEnvironmentClient, ContainerAppClient, GitHubActionClient
+from ._clients import ManagedEnvironmentClient, ContainerAppClient, GitHubActionClient, ConnectedEnvironmentClient
 
 from ._utils import (
     get_randomized_name,
@@ -49,9 +49,11 @@ from ._utils import (
 from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, MAXIMUM_CONTAINER_APP_NAME_LENGTH
 
 from .custom import (
+    create_connected_environment,
     create_managed_environment,
     containerapp_up_logic,
     list_containerapp,
+    list_connected_environments,
     list_managed_environments,
     create_or_update_github_action,
 )
