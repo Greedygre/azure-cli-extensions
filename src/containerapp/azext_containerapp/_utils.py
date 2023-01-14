@@ -1454,15 +1454,45 @@ def _validate_custom_loc_and_location(cmd, custom_location, cluster_extension_id
             raise ResourceNotFoundError('Custom location {} is not in cluster {}.'.format(custom_location, connected_cluster_id))
     return r.location
 
-def _get_cluster_extension(cmd, cluster_extension_id=None):
+
+def list_custom_location(cmd, resource_group=None, connected_cluster_id=None):
+    from ._client_factory import customlocation_client_factory
+    if resource_group:
+        r = customlocation_client_factory(cmd.cli_ctx).custom_locations.list_by_resource_group(resource_group_name=resource_group)
+    else:
+        r = customlocation_client_factory(cmd.cli_ctx).custom_locations.list_by_subscription()
+
+    custom_location_list = []
+    for e in r:
+        if connected_cluster_id and e.host_resource_id.lower() != connected_cluster_id.lower():
+            continue
+        custom_location_list.append(e)
+
+    return custom_location_list
+
+
+def create_custom_location(cmd, resource_group=None, custom_location_name=None, connected_cluster_id=None, namespace=None, cluster_extension_id=None, location=None):
+    from ._client_factory import customlocation_client_factory
+    from azure.mgmt.extendedlocation import models
+    from azure.cli.core.commands import LongRunningOperation
+
+    c = models.CustomLocation(name=custom_location_name, location=location, cluster_extension_ids=[cluster_extension_id], host_resource_id=connected_cluster_id,namespace=namespace, host_type='Microsoft.ExtendedLocation/customLocations')
+    poller = customlocation_client_factory(cmd.cli_ctx).custom_locations.begin_create_or_update(resource_group_name=resource_group, resource_name=custom_location_name, parameters=c)
+    custom_location = LongRunningOperation(cmd.cli_ctx)(poller)
+    return custom_location
+
+
+def get_cluster_extension(cmd, cluster_extension_id=None):
     parsed_extension = parse_resource_id(cluster_extension_id)
     cluster_rg = parsed_extension["resource_group"]
     cluster_rp = parsed_extension["namespace"]
     cluster_type = parsed_extension["type"]
     cluster_name = parsed_extension["name"]
-    return k8s_extension_client_factory(cmd.cli_ctx).get(resource_group_name=cluster_rg, cluster_rp=cluster_rp, cluster_resource_name=cluster_type, cluster_name=cluster_name,extension_name='xinyu6-app-ext')
+    resource_name = parsed_extension["resource_name"]
+    return k8s_extension_client_factory(cmd.cli_ctx).get(resource_group_name=cluster_rg, cluster_rp=cluster_rp, cluster_resource_name=cluster_type, cluster_name=cluster_name, extension_name=resource_name)
 
-def _list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id=None):
+
+def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id=None):
     if connected_cluster_id:
         parsed_extension = parse_resource_id(connected_cluster_id)
     elif cluster_extension_id:
@@ -1474,3 +1504,51 @@ def _list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_i
     cluster_name = parsed_extension["name"]
     extension_list = k8s_extension_client_factory(cmd.cli_ctx).list(resource_group_name=cluster_rg, cluster_rp=cluster_rp, cluster_resource_name=cluster_type, cluster_name=cluster_name)
     return extension_list
+
+
+def create_extension(cmd, connected_cluster_id=None, cluster_extension_id=None, app_name=None, namespace=None, connected_environment_name=None, log_customer_id=None, log_share_key=None):
+    from azure.mgmt.kubernetesconfiguration import models
+    from azure.cli.core.commands import LongRunningOperation
+    from base64 import b64encode
+
+    if cluster_extension_id:
+        parsed_extension = parse_resource_id(cluster_extension_id)
+    elif connected_cluster_id:
+        parsed_extension = parse_resource_id(connected_cluster_id)
+    cluster_rg = parsed_extension["resource_group"]
+    cluster_rp = parsed_extension["namespace"]
+    cluster_type = parsed_extension["type"]
+    cluster_name = parsed_extension["name"]
+    t = parsed_extension.get("resource_group")
+    if cluster_extension_id:
+        ext_name = parsed_extension["resource_name"]
+    else:
+        ext_name = "{}-ext".format(app_name).replace("_", "-")
+    e = models.Extension()
+    # e.type =
+    e.extension_type = 'Microsoft.App.Environment'
+    e.auto_upgrade_minor_version = True
+    # e.release_train =
+    e.scope = models.ScopeCluster
+    e.configuration_settings = {
+        "Microsoft.CustomLocation.ServiceAccount": "default",
+        "appsNamespace": namespace,
+        "clusterName": connected_environment_name,
+        "envoy.annotations.service.beta.kubernetes.io/azure-load-balancer-resource-group": 'xinyu3-infra-cluster',
+        "logProcessor.appLogs.destination": "log-analytics"
+    }
+
+    b64_customer_id = b64encode(bytes(log_customer_id, 'utf-8')).decode("utf-8")
+    b64_share_key = b64encode(bytes(log_share_key, 'utf-8')).decode("utf-8")
+    e.configuration_protected_settings = {
+        "logProcessor.appLogs.logAnalyticsConfig.customerId": b64_customer_id,
+        "logProcessor.appLogs.logAnalyticsConfig.sharedKey": b64_share_key
+    }
+    poller = k8s_extension_client_factory(cmd.cli_ctx).begin_create(resource_group_name=cluster_rg, cluster_rp=cluster_rp, cluster_resource_name=cluster_type, cluster_name=cluster_name, extension_name=ext_name, extension=e)
+    extension = LongRunningOperation(cmd.cli_ctx)(poller)
+    return extension
+
+
+def list_connected_k8s(cmd):
+    return
+
