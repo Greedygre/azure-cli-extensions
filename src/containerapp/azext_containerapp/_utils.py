@@ -7,6 +7,7 @@
 import time
 import json
 import platform
+from base64 import b64encode
 
 from urllib.parse import urlparse
 from datetime import datetime
@@ -14,6 +15,7 @@ from dateutil.relativedelta import relativedelta
 from azure.cli.core.azclierror import (ValidationError, RequiredArgumentMissingError, CLIInternalError,
                                        ResourceNotFoundError, FileOperationError, CLIError)
 from azure.cli.core.commands.client_factory import get_subscription_id
+from azure.cli.core.commands import LongRunningOperation
 from azure.cli.command_modules.appservice.utils import _normalize_location
 from azure.cli.command_modules.network._client_factory import network_client_factory
 
@@ -1447,18 +1449,20 @@ def _validate_custom_loc_and_location(cmd, custom_location, cluster_extension_id
     parsed_custom_loc = parse_resource_id(custom_location)
     custom_loc_name = parsed_custom_loc["name"]
     custom_loc_rg = parsed_custom_loc["resource_group"]
-    r = customlocation_client_factory(cmd.cli_ctx).custom_locations.get(resource_group_name=custom_loc_rg, resource_name=custom_loc_name)
+    r = customlocation_client_factory(cmd.cli_ctx).custom_locations.get(resource_group_name=custom_loc_rg,
+                                                                        resource_name=custom_loc_name)
     if connected_cluster_id:
-        print(r.host_resource_id)
         if connected_cluster_id != r.host_resource_id:
-            raise ResourceNotFoundError('Custom location {} is not in cluster {}.'.format(custom_location, connected_cluster_id))
+            raise ResourceNotFoundError(
+                'Custom location {} not in cluster {}.'.format(custom_location, connected_cluster_id))
     return r.location
 
 
 def list_custom_location(cmd, resource_group=None, connected_cluster_id=None):
     from ._client_factory import customlocation_client_factory
     if resource_group:
-        r = customlocation_client_factory(cmd.cli_ctx).custom_locations.list_by_resource_group(resource_group_name=resource_group)
+        r = customlocation_client_factory(cmd.cli_ctx).custom_locations.list_by_resource_group(
+            resource_group_name=resource_group)
     else:
         r = customlocation_client_factory(cmd.cli_ctx).custom_locations.list_by_subscription()
 
@@ -1471,13 +1475,16 @@ def list_custom_location(cmd, resource_group=None, connected_cluster_id=None):
     return custom_location_list
 
 
-def create_custom_location(cmd, resource_group=None, custom_location_name=None, connected_cluster_id=None, namespace=None, cluster_extension_id=None, location=None):
+def create_custom_location(cmd, resource_group=None, custom_location_name=None, connected_cluster_id=None,
+                           namespace=None, cluster_extension_id=None, location=None):
     from ._client_factory import customlocation_client_factory
     from azure.mgmt.extendedlocation import models
-    from azure.cli.core.commands import LongRunningOperation
 
-    c = models.CustomLocation(name=custom_location_name, location=location, cluster_extension_ids=[cluster_extension_id], host_resource_id=connected_cluster_id,namespace=namespace, host_type=models.HostType.KUBERNETES)
-    poller = customlocation_client_factory(cmd.cli_ctx).custom_locations.begin_create_or_update(resource_group_name=resource_group, resource_name=custom_location_name, parameters=c)
+    c = models.CustomLocation(name=custom_location_name, location=location,
+                              cluster_extension_ids=[cluster_extension_id], host_resource_id=connected_cluster_id,
+                              namespace=namespace, host_type=models.HostType.KUBERNETES)
+    poller = customlocation_client_factory(cmd.cli_ctx).custom_locations.begin_create_or_update(
+        resource_group_name=resource_group, resource_name=custom_location_name, parameters=c)
     custom_location = LongRunningOperation(cmd.cli_ctx)(poller)
     return custom_location
 
@@ -1489,7 +1496,9 @@ def get_cluster_extension(cmd, cluster_extension_id=None):
     cluster_type = parsed_extension.get("type")
     cluster_name = parsed_extension.get("name")
     resource_name = parsed_extension.get("resource_name")
-    return k8s_extension_client_factory(cmd.cli_ctx).get(resource_group_name=cluster_rg, cluster_rp=cluster_rp, cluster_resource_name=cluster_type, cluster_name=cluster_name, extension_name=resource_name)
+    return k8s_extension_client_factory(cmd.cli_ctx).get(resource_group_name=cluster_rg, cluster_rp=cluster_rp,
+                                                         cluster_resource_name=cluster_type, cluster_name=cluster_name,
+                                                         extension_name=resource_name)
 
 
 def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id=None):
@@ -1502,14 +1511,16 @@ def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id
     cluster_rp = parsed_extension.get("namespace")
     cluster_type = parsed_extension.get("type")
     cluster_name = parsed_extension.get("name")
-    extension_list = k8s_extension_client_factory(cmd.cli_ctx).list(resource_group_name=cluster_rg, cluster_rp=cluster_rp, cluster_resource_name=cluster_type, cluster_name=cluster_name)
+    extension_list = k8s_extension_client_factory(cmd.cli_ctx).list(resource_group_name=cluster_rg,
+                                                                    cluster_rp=cluster_rp,
+                                                                    cluster_resource_name=cluster_type,
+                                                                    cluster_name=cluster_name)
     return extension_list
 
 
-def create_extension(cmd, connected_cluster_id=None, cluster_extension_id=None, app_name=None, namespace=None, connected_environment_name=None, log_customer_id=None, log_share_key=None):
+def create_extension(cmd, connected_cluster_id=None, cluster_extension_id=None, app_name=None, namespace=None,
+                     connected_environment_name=None, log_customer_id=None, log_share_key=None):
     from azure.mgmt.kubernetesconfiguration import models
-    from azure.cli.core.commands import LongRunningOperation
-    from base64 import b64encode
 
     if cluster_extension_id:
         parsed_extension = parse_resource_id(cluster_extension_id)
@@ -1542,11 +1553,14 @@ def create_extension(cmd, connected_cluster_id=None, cluster_extension_id=None, 
         "logProcessor.appLogs.logAnalyticsConfig.customerId": b64_customer_id,
         "logProcessor.appLogs.logAnalyticsConfig.sharedKey": b64_share_key
     }
-    poller = k8s_extension_client_factory(cmd.cli_ctx).begin_create(resource_group_name=cluster_rg, cluster_rp=cluster_rp, cluster_resource_name=cluster_type, cluster_name=cluster_name, extension_name=ext_name, extension=e)
+    poller = k8s_extension_client_factory(cmd.cli_ctx).begin_create(resource_group_name=cluster_rg,
+                                                                    cluster_rp=cluster_rp,
+                                                                    cluster_resource_name=cluster_type,
+                                                                    cluster_name=cluster_name, extension_name=ext_name,
+                                                                    extension=e)
     extension = LongRunningOperation(cmd.cli_ctx)(poller)
     return extension
 
 
-def list_connected_k8s(cmd):
+def get_connected_k8s(cmd):
     return
-
