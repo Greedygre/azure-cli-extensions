@@ -1476,7 +1476,7 @@ def create_custom_location(cmd, resource_group=None, custom_location_name=None, 
     from azure.mgmt.extendedlocation import models
     from azure.cli.core.commands import LongRunningOperation
 
-    c = models.CustomLocation(name=custom_location_name, location=location, cluster_extension_ids=[cluster_extension_id], host_resource_id=connected_cluster_id,namespace=namespace, host_type='Microsoft.ExtendedLocation/customLocations')
+    c = models.CustomLocation(name=custom_location_name, location=location, cluster_extension_ids=[cluster_extension_id], host_resource_id=connected_cluster_id,namespace=namespace, host_type=models.HostType.KUBERNETES)
     poller = customlocation_client_factory(cmd.cli_ctx).custom_locations.begin_create_or_update(resource_group_name=resource_group, resource_name=custom_location_name, parameters=c)
     custom_location = LongRunningOperation(cmd.cli_ctx)(poller)
     return custom_location
@@ -1484,11 +1484,11 @@ def create_custom_location(cmd, resource_group=None, custom_location_name=None, 
 
 def get_cluster_extension(cmd, cluster_extension_id=None):
     parsed_extension = parse_resource_id(cluster_extension_id)
-    cluster_rg = parsed_extension["resource_group"]
-    cluster_rp = parsed_extension["namespace"]
-    cluster_type = parsed_extension["type"]
-    cluster_name = parsed_extension["name"]
-    resource_name = parsed_extension["resource_name"]
+    cluster_rg = parsed_extension.get("resource_group")
+    cluster_rp = parsed_extension.get("namespace")
+    cluster_type = parsed_extension.get("type")
+    cluster_name = parsed_extension.get("name")
+    resource_name = parsed_extension.get("resource_name")
     return k8s_extension_client_factory(cmd.cli_ctx).get(resource_group_name=cluster_rg, cluster_rp=cluster_rp, cluster_resource_name=cluster_type, cluster_name=cluster_name, extension_name=resource_name)
 
 
@@ -1498,10 +1498,10 @@ def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id
     elif cluster_extension_id:
         parsed_extension = parse_resource_id(cluster_extension_id)
 
-    cluster_rg = parsed_extension["resource_group"]
-    cluster_rp = parsed_extension["namespace"]
-    cluster_type = parsed_extension["type"]
-    cluster_name = parsed_extension["name"]
+    cluster_rg = parsed_extension.get("resource_group")
+    cluster_rp = parsed_extension.get("namespace")
+    cluster_type = parsed_extension.get("type")
+    cluster_name = parsed_extension.get("name")
     extension_list = k8s_extension_client_factory(cmd.cli_ctx).list(resource_group_name=cluster_rg, cluster_rp=cluster_rp, cluster_resource_name=cluster_type, cluster_name=cluster_name)
     return extension_list
 
@@ -1515,26 +1515,24 @@ def create_extension(cmd, connected_cluster_id=None, cluster_extension_id=None, 
         parsed_extension = parse_resource_id(cluster_extension_id)
     elif connected_cluster_id:
         parsed_extension = parse_resource_id(connected_cluster_id)
-    cluster_rg = parsed_extension["resource_group"]
-    cluster_rp = parsed_extension["namespace"]
-    cluster_type = parsed_extension["type"]
-    cluster_name = parsed_extension["name"]
-    t = parsed_extension.get("resource_group")
+    cluster_rg = parsed_extension.get("resource_group")
+    cluster_rp = parsed_extension.get("namespace")
+    cluster_type = parsed_extension.get("type")
+    cluster_name = parsed_extension.get("name")
     if cluster_extension_id:
-        ext_name = parsed_extension["resource_name"]
+        ext_name = parsed_extension.get("resource_name")
     else:
         ext_name = "{}-ext".format(app_name).replace("_", "-")
     e = models.Extension()
-    # e.type =
     e.extension_type = 'Microsoft.App.Environment'
     e.auto_upgrade_minor_version = True
-    # e.release_train =
-    e.scope = models.ScopeCluster
+    e.scope = models.Scope(cluster=models.ScopeCluster(release_namespace=namespace))
+    e.release_namespace = namespace
     e.configuration_settings = {
         "Microsoft.CustomLocation.ServiceAccount": "default",
         "appsNamespace": namespace,
         "clusterName": connected_environment_name,
-        "envoy.annotations.service.beta.kubernetes.io/azure-load-balancer-resource-group": 'xinyu3-infra-cluster',
+        "envoy.annotations.service.beta.kubernetes.io/azure-load-balancer-resource-group": 'xinyu5-infra-cluster',
         "logProcessor.appLogs.destination": "log-analytics"
     }
 
