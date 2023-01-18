@@ -15,6 +15,7 @@ LOG_ANALYTICS_RP = "Microsoft.OperationalInsights"
 CONTAINER_APPS_RP = "Microsoft.App"
 MANAGED_ENVIRONMENT_TYPE = "managedEnvironments"
 CONNECTED_ENVIRONMENT_TYPE = "connectedEnvironments"
+CONNECTED_CLUSTER_TYPE = "connectedClusters"
 
 MAX_ENV_PER_LOCATION = 2
 

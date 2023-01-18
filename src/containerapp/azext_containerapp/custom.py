@@ -64,7 +64,7 @@ from ._utils import (_validate_subscription_registered, _get_location_from_resou
                      validate_container_app_name, _update_weights, get_vnet_location, register_provider_if_needed,
                      generate_randomized_cert_name, _get_name, load_cert_file, check_cert_name_availability,
                      validate_hostname, patch_new_custom_domain, get_custom_domains, _validate_revision_name, set_managed_identity,
-                     clean_null_values, _populate_secret_values, connected_env_check_cert_name_availability, _validate_custom_loc_and_location)
+                     clean_null_values, _populate_secret_values, connected_env_check_cert_name_availability, _validate_custom_loc_and_location, _validate_connectedk8s)
 
 
 from ._ssh_utils import (SSH_DEFAULT_ENCODING, WebSocketConnection, read_ssh, get_stdin_writer, SSH_CTRL_C_MSG,
@@ -2475,16 +2475,18 @@ def containerapp_up(cmd,
     from ._up_utils import (_validate_up_args, _reformat_image, _get_dockerfile_content, _get_ingress_and_target_port,
                             ResourceGroup, ContainerAppEnvironment, ContainerApp, _get_registry_from_app,
                             _get_registry_details, _create_github_action, _set_up_defaults, up_output,
-                            check_env_name_on_rg, get_token, _validate_containerapp_name)
+                            check_env_name_on_rg, get_token, _validate_containerapp_name, format_location)
     from ._github_oauth import cache_github_token
     HELLOWORLD = "mcr.microsoft.com/azuredocs/containerapps-helloworld"
     dockerfile = "Dockerfile"  # for now the dockerfile name must be "Dockerfile" (until GH actions API is updated)
-
+    location = format_location(location)
     _validate_containerapp_name(name)
 
     register_provider_if_needed(cmd, CONTAINER_APPS_RP)
     _validate_up_args(cmd, source, image, repo, registry_server)
     validate_container_app_name(name)
+    _validate_custom_loc_and_location(cmd, custom_location, connected_cluster_id)
+    _validate_connectedk8s(cmd, connected_cluster_id)
     check_env_name_on_rg(cmd, env, resource_group_name, location)
 
     image = _reformat_image(source, repo, image)
@@ -2503,10 +2505,10 @@ def containerapp_up(cmd,
     ingress, target_port = _get_ingress_and_target_port(ingress, target_port, dockerfile_content)
 
     resource_group = ResourceGroup(cmd, name=resource_group_name, location=location)
-    env = ContainerAppEnvironment(cmd, env, resource_group, location=location, logs_key=logs_key, logs_customer_id=logs_customer_id)
+    env = ContainerAppEnvironment(cmd, env, resource_group, location=location, logs_key=logs_key, logs_customer_id=logs_customer_id, custom_location=custom_location, connected_cluster_id=connected_cluster_id)
     app = ContainerApp(cmd, name, resource_group, None, image, env, target_port, registry_server, registry_user, registry_pass, env_vars, ingress)
 
-    _set_up_defaults(cmd, name, resource_group_name, logs_customer_id, location, resource_group, env, app)
+    _set_up_defaults(cmd, name, resource_group_name, logs_customer_id, location, custom_location, connected_cluster_id, resource_group, env, app)
 
     if app.check_exists():
         if app.get()["properties"]["provisioningState"] == "InProgress":
