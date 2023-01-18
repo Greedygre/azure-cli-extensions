@@ -2471,7 +2471,6 @@ def containerapp_up(cmd,
                     service_principal_client_secret=None,
                     service_principal_tenant_id=None,
                     custom_location=None,
-                    cluster_extension_id=None,
                     connected_cluster_id=None):
     from ._up_utils import (_validate_up_args, _reformat_image, _get_dockerfile_content, _get_ingress_and_target_port,
                             ResourceGroup, ContainerAppEnvironment, ContainerApp, _get_registry_from_app,

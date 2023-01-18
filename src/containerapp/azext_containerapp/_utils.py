@@ -1044,6 +1044,12 @@ def get_randomized_name(prefix, name=None, initial="rg"):
         return name
     return default
 
+def get_randomized_name_with_dash(prefix, name=None, initial="rg"):
+    from random import randint
+    default = "{}-{}-{:04}".format(prefix, initial, randint(0, 9999))
+    if name is not None:
+        return name
+    return default
 
 def generate_randomized_cert_name(thumbprint, prefix, initial="rg"):
     from random import randint
@@ -1444,7 +1450,7 @@ def set_managed_identity(cmd, resource_group_name, containerapp_def, system_assi
                 containerapp_def["identity"]["userAssignedIdentities"][r] = {}
 
 
-def _validate_custom_loc_and_location(cmd, custom_location, cluster_extension_id=None, connected_cluster_id=None):
+def _validate_custom_loc_and_location(cmd, custom_location, connected_cluster_id=None):
     from ._client_factory import customlocation_client_factory
     parsed_custom_loc = parse_resource_id(custom_location)
     custom_loc_name = parsed_custom_loc["name"]
@@ -1476,7 +1482,7 @@ def list_custom_location(cmd, resource_group=None, connected_cluster_id=None):
 
 
 def create_custom_location(cmd, resource_group=None, custom_location_name=None, connected_cluster_id=None,
-                           namespace=None, cluster_extension_id=None, location=None):
+                           namespace='containerapp-ns', cluster_extension_id=None, location=None):
     from ._client_factory import customlocation_client_factory
     from azure.mgmt.extendedlocation import models
 
@@ -1491,59 +1497,62 @@ def create_custom_location(cmd, resource_group=None, custom_location_name=None, 
 
 def get_cluster_extension(cmd, cluster_extension_id=None):
     parsed_extension = parse_resource_id(cluster_extension_id)
+    subscription_id = parsed_extension.get("subscription")
     cluster_rg = parsed_extension.get("resource_group")
     cluster_rp = parsed_extension.get("namespace")
     cluster_type = parsed_extension.get("type")
     cluster_name = parsed_extension.get("name")
     resource_name = parsed_extension.get("resource_name")
-    return k8s_extension_client_factory(cmd.cli_ctx).get(resource_group_name=cluster_rg, cluster_rp=cluster_rp,
-                                                         cluster_resource_name=cluster_type, cluster_name=cluster_name,
-                                                         extension_name=resource_name)
+
+    return k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription_id).get(
+            resource_group_name=cluster_rg,
+            cluster_rp=cluster_rp,
+            cluster_resource_name=cluster_type,
+            cluster_name=cluster_name,
+            extension_name=resource_name)
 
 
 def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id=None):
+    parsed_extension = {}
     if connected_cluster_id:
         parsed_extension = parse_resource_id(connected_cluster_id)
     elif cluster_extension_id:
         parsed_extension = parse_resource_id(cluster_extension_id)
 
+    subscription_id = parsed_extension.get("subscription")
     cluster_rg = parsed_extension.get("resource_group")
     cluster_rp = parsed_extension.get("namespace")
     cluster_type = parsed_extension.get("type")
     cluster_name = parsed_extension.get("name")
-    extension_list = k8s_extension_client_factory(cmd.cli_ctx).list(resource_group_name=cluster_rg,
+    extension_list = k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription_id).list(resource_group_name=cluster_rg,
                                                                     cluster_rp=cluster_rp,
                                                                     cluster_resource_name=cluster_type,
                                                                     cluster_name=cluster_name)
     return extension_list
 
 
-def create_extension(cmd, connected_cluster_id=None, cluster_extension_id=None, app_name=None, namespace=None,
+def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns',
                      connected_environment_name=None, log_customer_id=None, log_share_key=None):
     from azure.mgmt.kubernetesconfiguration import models
 
-    if cluster_extension_id:
-        parsed_extension = parse_resource_id(cluster_extension_id)
-    elif connected_cluster_id:
-        parsed_extension = parse_resource_id(connected_cluster_id)
+    parsed_extension = parse_resource_id(connected_cluster_id)
+    subscription = parsed_extension.get("subscription")
     cluster_rg = parsed_extension.get("resource_group")
     cluster_rp = parsed_extension.get("namespace")
     cluster_type = parsed_extension.get("type")
     cluster_name = parsed_extension.get("name")
-    if cluster_extension_id:
-        ext_name = parsed_extension.get("resource_name")
-    else:
-        ext_name = "{}-ext".format(app_name).replace("_", "-")
+    ext_name = get_randomized_name_with_dash(prefix='containerapps', initial='ext')
     e = models.Extension()
     e.extension_type = 'Microsoft.App.Environment'
     e.auto_upgrade_minor_version = True
+
     e.scope = models.Scope(cluster=models.ScopeCluster(release_namespace=namespace))
     e.release_namespace = namespace
+
     e.configuration_settings = {
         "Microsoft.CustomLocation.ServiceAccount": "default",
         "appsNamespace": namespace,
         "clusterName": connected_environment_name,
-        "envoy.annotations.service.beta.kubernetes.io/azure-load-balancer-resource-group": 'xinyu5-infra-cluster',
         "logProcessor.appLogs.destination": "log-analytics"
     }
 
@@ -1553,7 +1562,7 @@ def create_extension(cmd, connected_cluster_id=None, cluster_extension_id=None, 
         "logProcessor.appLogs.logAnalyticsConfig.customerId": b64_customer_id,
         "logProcessor.appLogs.logAnalyticsConfig.sharedKey": b64_share_key
     }
-    poller = k8s_extension_client_factory(cmd.cli_ctx).begin_create(resource_group_name=cluster_rg,
+    poller = k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription).begin_create(resource_group_name=cluster_rg,
                                                                     cluster_rp=cluster_rp,
                                                                     cluster_resource_name=cluster_type,
                                                                     cluster_name=cluster_name, extension_name=ext_name,

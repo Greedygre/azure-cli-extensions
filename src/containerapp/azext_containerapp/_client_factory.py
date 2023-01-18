@@ -81,8 +81,8 @@ def customlocation_client_factory(cli_ctx, api_version=None, **_):
     return get_mgmt_service_client(cli_ctx, ResourceType.MGMT_CUSTOMLOCATION, api_version=api_version)
 
 
-def k8s_extension_client_factory(cli_ctx):
+def k8s_extension_client_factory(cli_ctx, subscription_id=None):
     from azure.mgmt.kubernetesconfiguration import SourceControlConfigurationClient
 
-    r =  get_mgmt_service_client(cli_ctx, SourceControlConfigurationClient)
+    r = get_mgmt_service_client(cli_ctx, SourceControlConfigurationClient, subscription_id=subscription_id)
     return r.extensions

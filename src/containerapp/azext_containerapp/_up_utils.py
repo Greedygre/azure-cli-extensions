@@ -46,7 +46,7 @@ from ._utils import (
     register_provider_if_needed
 )
 
-from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, MAXIMUM_CONTAINER_APP_NAME_LENGTH
+from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, MAXIMUM_CONTAINER_APP_NAME_LENGTH, MANAGED_ENVIRONMENT_TYPE, CONNECTED_ENVIRONMENT_TYPE
 
 from .custom import (
     create_connected_environment,
@@ -865,17 +865,29 @@ def list_environment_locations(cmd):
 
 
 def check_env_name_on_rg(cmd, env, resource_group_name, location):
+    env_dict = parse_resource_id(env)
+    env_name = env_dict.get("name")
+    resource_type = env_dict.get("resource_type")
+
     if location:
         _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "managedEnvironments")
     if env and resource_group_name and location:
         env_def = None
         try:
-            env_def = ManagedEnvironmentClient.show(cmd, resource_group_name, parse_resource_id(env)["name"])
+            if resource_type is None:
+                env_def = ManagedEnvironmentClient.show(cmd, resource_group_name, env_name)
+                if env_def is None:
+                    env_def = ConnectedEnvironmentClient.show(cmd, resource_group_name, env_name)
+            if resource_type:
+                if MANAGED_ENVIRONMENT_TYPE == resource_type:
+                    env_def = ManagedEnvironmentClient.show(cmd, resource_group_name, env_name)
+                if CONNECTED_ENVIRONMENT_TYPE == resource_type:
+                    env_def = ConnectedEnvironmentClient.show(cmd, resource_group_name, env_name)
         except:  # pylint: disable=bare-except
             pass
         if env_def:
             if location != env_def["location"]:
-                raise ValidationError("Environment {} already exists in resource group {} on location {}, cannot change location of existing environment to {}.".format(parse_resource_id(env)["name"], resource_group_name, env_def["location"], location))
+                raise ValidationError("Environment {} already exists in resource group {} on location {}, cannot change location of existing environment to {}.".format(env_name, resource_group_name, env_def["location"], location))
 
 
 def get_token(cmd, repo, token):
