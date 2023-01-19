@@ -725,6 +725,7 @@ def _set_up_defaults(
             cmd, resource_group_name, env, resource_group, logs_customer_id, location
         )
 
+    env_list = []
     # try to set RG name by env name
     if env.name and not resource_group.name and env.resource_type.lower() != CONNECTED_ENVIRONMENT_TYPE.lower():
         if not location:
@@ -741,36 +742,33 @@ def _set_up_defaults(
             )    # get ACR details from --image, if possible
 
     if len(env_list) == 0:
-        connected_env_list = list_connected_environments(cmd=cmd)
-        for e in connected_env_list:
-            if env.name != e.name:
-                continue
-            if location and format_location(e["location"]) != location:
-                continue
-            if custom_location and e["extendedLocation"]["name"].lower() != custom_location.lower():
-                continue
-            if connected_cluster_id:
-                custom_location_from_env = get_custom_location(cmd=cmd, custom_location=e["extendedLocation"]["name"])
-                if connected_cluster_id.lower() != custom_location_from_env.host_resource_id.lower():
+        if env.name or custom_location or connected_cluster_id:
+            connected_env_list = list_connected_environments(cmd=cmd, resource_group_name=resource_group_name)
+            for e in connected_env_list:
+                if env.name and env.name != e.name:
                     continue
-            env_list.append(e)
+                if location and format_location(e["location"]) != location:
+                    continue
+                if custom_location and e["extendedLocation"]["name"].lower() != custom_location.lower():
+                    continue
+                if connected_cluster_id:
+                    custom_location_from_env = get_custom_location(cmd=cmd, custom_location=e["extendedLocation"]["name"])
+                    if connected_cluster_id.lower() != custom_location_from_env.host_resource_id.lower():
+                        continue
+                env_list.append(e)
 
         if len(env_list) == 1:
             resource_group.name = parse_resource_id(env_list[0]["id"])["resource_group"]
-            env.resource_type = CONNECTED_ENVIRONMENT_TYPE
+            env.set_name(env_list[0]["id"])
         if len(env_list) > 1:
+            if env.name is None:
+                resource_group.name = parse_resource_id(env_list[0]["id"])["resource_group"]
+                env.set_name(env_list[0]["id"])
             raise ValidationError(
                 f"There are multiple environments with name {env.name} on the subscription. "
                 "Please specify which resource group your Connected environment is in."
             )    # get ACR details from --image, if possible
 
-    if not env.resource_type:
-        if custom_location or connected_cluster_id:
-            env.resource_type = CONNECTED_ENVIRONMENT_TYPE
-            env.custom_location = custom_location
-            env.connected_cluster_id = connected_cluster_id
-        else:
-            env.resource_type = MANAGED_ENVIRONMENT_TYPE
     _get_acr_from_image(cmd, app)
 
 
