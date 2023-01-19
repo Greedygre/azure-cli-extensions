@@ -64,14 +64,14 @@ from ._utils import (_validate_subscription_registered, _get_location_from_resou
                      validate_container_app_name, _update_weights, get_vnet_location, register_provider_if_needed,
                      generate_randomized_cert_name, _get_name, load_cert_file, check_cert_name_availability,
                      validate_hostname, patch_new_custom_domain, get_custom_domains, _validate_revision_name, set_managed_identity,
-                     clean_null_values, _populate_secret_values, connected_env_check_cert_name_availability, _validate_custom_loc_and_location, _validate_connectedk8s)
+                     clean_null_values, _populate_secret_values, connected_env_check_cert_name_availability, _validate_custom_loc_and_location, validate_connected_k8s_and_custom_location)
 
 
 from ._ssh_utils import (SSH_DEFAULT_ENCODING, WebSocketConnection, read_ssh, get_stdin_writer, SSH_CTRL_C_MSG,
                          SSH_BACKUP_ENCODING)
 from ._constants import (MAXIMUM_SECRET_LENGTH, MICROSOFT_SECRET_SETTING_NAME, FACEBOOK_SECRET_SETTING_NAME, GITHUB_SECRET_SETTING_NAME,
                          GOOGLE_SECRET_SETTING_NAME, TWITTER_SECRET_SETTING_NAME, APPLE_SECRET_SETTING_NAME, CONTAINER_APPS_RP,
-                         NAME_INVALID, NAME_ALREADY_EXISTS, ACR_IMAGE_SUFFIX)
+                         NAME_INVALID, NAME_ALREADY_EXISTS, ACR_IMAGE_SUFFIX, CONNECTED_ENVIRONMENT_TYPE)
 
 logger = get_logger(__name__)
 
@@ -2485,9 +2485,10 @@ def containerapp_up(cmd,
     register_provider_if_needed(cmd, CONTAINER_APPS_RP)
     _validate_up_args(cmd, source, image, repo, registry_server)
     validate_container_app_name(name)
-    _validate_custom_loc_and_location(cmd, custom_location, connected_cluster_id)
-    _validate_connectedk8s(cmd, connected_cluster_id)
-    check_env_name_on_rg(cmd, env, resource_group_name, location)
+    if custom_location or connected_cluster_id:
+        validate_connected_k8s_and_custom_location(cmd, location, custom_location, connected_cluster_id)
+
+    check_env_name_on_rg(cmd, env, resource_group_name, location, custom_location, connected_cluster_id)
 
     image = _reformat_image(source, repo, image)
     token = get_token(cmd, repo, token)

@@ -165,6 +165,9 @@ class ContainerAppEnvironment(Resource):
                     self.resource_group = ResourceGroup(cmd, rg, location)
             if "resource_type" in env_dict:
                 self.resource_type = env_dict["resource_type"]
+        if self.resource_type is None:
+            if custom_location or connected_cluster_id:
+                self.resource_type = CONNECTED_ENVIRONMENT_TYPE
         self.location = location
         self.logs_key = logs_key
         self.logs_customer_id = logs_customer_id
@@ -717,13 +720,13 @@ def _set_up_defaults(
     _get_app_env_and_group(cmd, name, resource_group, env, location)
 
     # If no env passed in (and not creating a new RG), then try getting an env by location / log analytics ID
-    if not custom_location and not connected_cluster_id:
+    if custom_location is None and not connected_cluster_id:
         _get_env_and_group_from_log_analytics(
             cmd, resource_group_name, env, resource_group, logs_customer_id, location
         )
 
     # try to set RG name by env name
-    if env.name and not resource_group.name and env.resource_type != CONNECTED_ENVIRONMENT_TYPE:
+    if env.name and not resource_group.name and env.resource_type.lower() != CONNECTED_ENVIRONMENT_TYPE.lower():
         if not location:
             env_list = [e for e in list_managed_environments(cmd=cmd) if e["name"] == env.name]
         else:
@@ -740,15 +743,15 @@ def _set_up_defaults(
     if len(env_list) == 0:
         connected_env_list = list_connected_environments(cmd=cmd)
         for e in connected_env_list:
-            if env.name != name:
+            if env.name != e.name:
                 continue
-            if location and format_location(["location"]) != location:
+            if location and format_location(e["location"]) != location:
                 continue
             if custom_location and e["extendedLocation"]["name"].lower() != custom_location.lower():
                 continue
             if connected_cluster_id:
                 custom_location_from_env = get_custom_location(cmd=cmd, custom_location=e["extendedLocation"]["name"])
-                if connected_cluster_id != custom_location_from_env.host_resource_id:
+                if connected_cluster_id.lower() != custom_location_from_env.host_resource_id.lower():
                     continue
             env_list.append(e)
 
@@ -916,24 +919,27 @@ def list_environment_locations(cmd):
     return res_locations
 
 
-def check_env_name_on_rg(cmd, env, resource_group_name, location):
+def check_env_name_on_rg(cmd, env, resource_group_name, location, custom_location, connected_cluster_id):
     env_dict = parse_resource_id(env)
     env_name = env_dict.get("name")
     resource_type = env_dict.get("resource_type")
+    if resource_type is None:
+        if custom_location or connected_cluster_id:
+            resource_type = CONNECTED_ENVIRONMENT_TYPE
 
     if location:
         _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "managedEnvironments")
     if env and resource_group_name and location:
         env_def = None
         try:
-            if resource_type is None:
+            if resource_type:
+                if MANAGED_ENVIRONMENT_TYPE.lower() == resource_type.lower():
+                    env_def = ManagedEnvironmentClient.show(cmd, resource_group_name, env_name)
+                if CONNECTED_ENVIRONMENT_TYPE.lower() == resource_type.lower():
+                    env_def = ConnectedEnvironmentClient.show(cmd, resource_group_name, env_name)
+            else:
                 env_def = ManagedEnvironmentClient.show(cmd, resource_group_name, env_name)
                 if env_def is None:
-                    env_def = ConnectedEnvironmentClient.show(cmd, resource_group_name, env_name)
-            if resource_type:
-                if MANAGED_ENVIRONMENT_TYPE == resource_type:
-                    env_def = ManagedEnvironmentClient.show(cmd, resource_group_name, env_name)
-                if CONNECTED_ENVIRONMENT_TYPE == resource_type:
                     env_def = ConnectedEnvironmentClient.show(cmd, resource_group_name, env_name)
         except:  # pylint: disable=bare-except
             pass
