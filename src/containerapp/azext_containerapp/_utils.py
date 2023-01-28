@@ -29,6 +29,7 @@ from ._constants import (MAXIMUM_CONTAINER_APP_NAME_LENGTH, SHORT_POLLING_INTERV
                          CONNECTED_ENV_CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, CONNECTED_CLUSTER_TYPE, CUSTOM_LOCATION_RP, KUBERNETES_RP, KUBERNETES_CONFIGURATION_RP)
 from ._models import (ContainerAppCustomDomainEnvelope as ContainerAppCustomDomainEnvelopeModel)
 from ._client_factory import k8s_extension_client_factory
+from ._up_utils import format_location
 
 logger = get_logger(__name__)
 
@@ -1450,19 +1451,20 @@ def set_managed_identity(cmd, resource_group_name, containerapp_def, system_assi
                 containerapp_def["identity"]["userAssignedIdentities"][r] = {}
 
 
-def validate_connected_k8s_and_custom_location(cmd, location=None, custom_location=None, connected_cluster_id=None):
+def validate_connected_k8s_and_custom_location(cmd, location=None, env=None, custom_location=None, connected_cluster_id=None):
     register_provider_if_needed(cmd, CUSTOM_LOCATION_RP)
     register_provider_if_needed(cmd, KUBERNETES_CONFIGURATION_RP)
     if location:
         _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "connectedEnvironments")
     if custom_location:
-        _validate_custom_loc_and_location(cmd, custom_location, connected_cluster_id)
+        _validate_custom_loc_and_location(cmd, env, custom_location, connected_cluster_id)
     if connected_cluster_id:
         _validate_connected_k8s(cmd, connected_cluster_id)
 
 
-def _validate_custom_loc_and_location(cmd, custom_location=None, connected_cluster_id=None):
+def _validate_custom_loc_and_location(cmd, env=None, custom_location=None, connected_cluster_id=None):
     from ._client_factory import customlocation_client_factory
+    from ._up_utils import list_connected_environments
 
     if not is_valid_resource_id(custom_location):
         raise ValidationError(
@@ -1472,8 +1474,22 @@ def _validate_custom_loc_and_location(cmd, custom_location=None, connected_clust
     subscription_id = parsed_custom_loc.get("subscription")
     custom_loc_name = parsed_custom_loc["name"]
     custom_loc_rg = parsed_custom_loc["resource_group"]
-    r = customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).custom_locations.get(resource_group_name=custom_loc_rg,
-                                                                        resource_name=custom_loc_name)
+    try:
+        r = customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).custom_locations.get(resource_group_name=custom_loc_rg,
+                                                                            resource_name=custom_loc_name)
+    except:
+        raise ResourceNotFoundError("Cannot find Custom location with custom location ID {}".format(custom_location))
+
+    # check env
+    if env:
+        env_list = [e for e in list_connected_environments(cmd=cmd, custom_location=custom_location) if
+                    (e["id"].lower() != env and e["name"] != env)]
+        if len(env_list) > 0:
+            raise ValidationError(
+                'There is existed environment {} with custom domain {} on the subscription. \n Please specify which resource group your Connected environment is in.'.format(
+                    env_list[0]["id"], custom_location)
+            )
+
     # check extension type
     if len(r.cluster_extension_ids) == 0:
         raise ValidationError(
@@ -1537,15 +1553,19 @@ def list_custom_location(cmd, resource_group=None, connected_cluster_id=None):
     return custom_location_list
 
 
-def create_custom_location(cmd, resource_group=None, custom_location_name=None, connected_cluster_id=None,
+def create_custom_location(cmd, custom_location_name=None, resource_group=None, connected_cluster_id=None,
                            namespace='containerapp-ns', cluster_extension_id=None, location=None):
     from ._client_factory import customlocation_client_factory
     from azure.mgmt.extendedlocation import models
-
+    parsed_cluster = parse_resource_id(connected_cluster_id)
+    subscription_id = parsed_cluster.get("subscription")
+    cluster_loc_rg = parsed_cluster["resource_group"]
+    if resource_group is None:
+        resource_group = cluster_loc_rg
     c = models.CustomLocation(name=custom_location_name, location=location,
                               cluster_extension_ids=[cluster_extension_id], host_resource_id=connected_cluster_id,
                               namespace=namespace, host_type=models.HostType.KUBERNETES)
-    poller = customlocation_client_factory(cmd.cli_ctx).custom_locations.begin_create_or_update(
+    poller = customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).custom_locations.begin_create_or_update(
         resource_group_name=resource_group, resource_name=custom_location_name, parameters=c)
     custom_location = LongRunningOperation(cmd.cli_ctx)(poller)
     return custom_location

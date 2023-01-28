@@ -55,16 +55,23 @@ from ._models import (
     AzureFileProperties as AzureFilePropertiesModel)
 from ._utils import (_validate_subscription_registered, _get_location_from_resource_group, _ensure_location_allowed,
                      parse_secret_flags, store_as_secret_and_return_secret_ref, parse_env_var_flags,
-                     _generate_log_analytics_if_not_provided, _get_existing_secrets, _convert_object_from_snake_to_camel_case,
-                     _object_to_dict, _add_or_update_secrets, _remove_additional_attributes, _remove_readonly_attributes,
-                     _add_or_update_env_vars, _add_or_update_tags, update_nested_dictionary, _update_revision_weights, _append_label_weights,
-                     _get_app_from_revision, raise_missing_token_suggestion, _infer_acr_credentials, _remove_registry_secret, _remove_secret,
-                     _ensure_identity_resource_id, _remove_dapr_readonly_attributes, _remove_env_vars, _validate_traffic_sum,
+                     _generate_log_analytics_if_not_provided, _get_existing_secrets,
+                     _convert_object_from_snake_to_camel_case,
+                     _object_to_dict, _add_or_update_secrets, _remove_additional_attributes,
+                     _remove_readonly_attributes,
+                     _add_or_update_env_vars, _add_or_update_tags, update_nested_dictionary, _update_revision_weights,
+                     _append_label_weights,
+                     _get_app_from_revision, raise_missing_token_suggestion, _infer_acr_credentials,
+                     _remove_registry_secret, _remove_secret,
+                     _ensure_identity_resource_id, _remove_dapr_readonly_attributes, _remove_env_vars,
+                     _validate_traffic_sum,
                      _update_revision_env_secretrefs, _get_acr_cred, safe_get, await_github_action, repo_url_to_name,
                      validate_container_app_name, _update_weights, get_vnet_location, register_provider_if_needed,
                      generate_randomized_cert_name, _get_name, load_cert_file, check_cert_name_availability,
-                     validate_hostname, patch_new_custom_domain, get_custom_domains, _validate_revision_name, set_managed_identity,
-                     clean_null_values, _populate_secret_values, connected_env_check_cert_name_availability, _validate_custom_loc_and_location, validate_connected_k8s_and_custom_location)
+                     validate_hostname, patch_new_custom_domain, get_custom_domains, _validate_revision_name,
+                     set_managed_identity,
+                     clean_null_values, _populate_secret_values, connected_env_check_cert_name_availability,
+                     _validate_custom_loc_and_location, validate_connected_k8s_and_custom_location, create_extension)
 
 
 from ._ssh_utils import (SSH_DEFAULT_ENCODING, WebSocketConnection, read_ssh, get_stdin_writer, SSH_CTRL_C_MSG,
@@ -1034,7 +1041,7 @@ def create_connected_environment(cmd,
     location = location or "northcentralusstage"
     register_provider_if_needed(cmd, CONTAINER_APPS_RP)
     _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "connectedEnvironments")
-    custom_loc_location = _validate_custom_loc_and_location(cmd, custom_location)
+    custom_loc_location = _validate_custom_loc_and_location(cmd, custom_location=custom_location)
 
     connected_env_def = ConnectedEnvironmentModel
     connected_env_def["location"] = location
@@ -2473,7 +2480,7 @@ def containerapp_up(cmd,
                     custom_location=None,
                     connected_cluster_id=None):
     from ._up_utils import (_validate_up_args, _reformat_image, _get_dockerfile_content, _get_ingress_and_target_port,
-                            ResourceGroup, ContainerAppEnvironment, ContainerApp, _get_registry_from_app,
+                            ResourceGroup, ContainerAppEnvironment, ContainerApp, CustomLocation, _get_registry_from_app,
                             _get_registry_details, _create_github_action, _set_up_defaults, up_output,
                             check_env_name_on_rg, get_token, _validate_containerapp_name, format_location)
     from ._github_oauth import cache_github_token
@@ -2486,7 +2493,7 @@ def containerapp_up(cmd,
     _validate_up_args(cmd, source, image, repo, registry_server)
     validate_container_app_name(name)
     if custom_location or connected_cluster_id:
-        validate_connected_k8s_and_custom_location(cmd, location, custom_location, connected_cluster_id)
+        validate_connected_k8s_and_custom_location(cmd, location, env, custom_location, connected_cluster_id)
 
     check_env_name_on_rg(cmd, env, resource_group_name, location, custom_location, connected_cluster_id)
 
@@ -2506,7 +2513,8 @@ def containerapp_up(cmd,
     ingress, target_port = _get_ingress_and_target_port(ingress, target_port, dockerfile_content)
 
     resource_group = ResourceGroup(cmd, name=resource_group_name, location=location)
-    env = ContainerAppEnvironment(cmd, env, resource_group, location=location, logs_key=logs_key, logs_customer_id=logs_customer_id, custom_location=custom_location, connected_cluster_id=connected_cluster_id)
+    custom_location_resource = CustomLocation(cmd, name=custom_location, connected_cluster_id=connected_cluster_id)
+    env = ContainerAppEnvironment(cmd, env, resource_group, location=location, logs_key=logs_key, logs_customer_id=logs_customer_id, custom_location=custom_location_resource, connected_cluster_id=connected_cluster_id)
     app = ContainerApp(cmd, name, resource_group, None, image, env, target_port, registry_server, registry_user, registry_pass, env_vars, ingress)
 
     _set_up_defaults(cmd, name, resource_group_name, logs_customer_id, location, custom_location, connected_cluster_id, resource_group, env, app)
@@ -2516,6 +2524,12 @@ def containerapp_up(cmd,
             raise ValidationError("Containerapp has an existing provisioning in progress. Please wait until provisioning has completed and rerun the command.")
 
     resource_group.create_if_needed()
+    if env.resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
+        if env.custom_location.cluster_extension_id is None:
+            extension = create_extension(cmd=cmd, connected_environment_name=env.name, log_customer_id=logs_customer_id, log_share_key=logs_key)
+            custom_location_resource.cluster_extension_id = extension.id
+            custom_location_resource.namespace = extension.namespace
+        custom_location_resource.create_if_needed(name)
     env.create_if_needed(name)
 
     if source or repo:
