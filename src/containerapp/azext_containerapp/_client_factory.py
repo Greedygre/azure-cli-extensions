@@ -91,4 +91,4 @@ def k8s_extension_client_factory(cli_ctx, subscription_id=None):
 def connected_k8s_client_factory(cli_ctx, subscription_id=None):
     from azure.mgmt.hybridkubernetes import ConnectedKubernetesClient
 
-    return get_mgmt_service_client(cli_ctx, ConnectedKubernetesClient, subscription_id=subscription_id)
+    return get_mgmt_service_client(cli_ctx, ConnectedKubernetesClient, subscription_id=subscription_id).connected_cluster

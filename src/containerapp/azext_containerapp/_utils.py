@@ -29,7 +29,6 @@ from ._constants import (MAXIMUM_CONTAINER_APP_NAME_LENGTH, SHORT_POLLING_INTERV
                          CONNECTED_ENV_CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, CONNECTED_CLUSTER_TYPE, CUSTOM_LOCATION_RP, KUBERNETES_RP, KUBERNETES_CONFIGURATION_RP)
 from ._models import (ContainerAppCustomDomainEnvelope as ContainerAppCustomDomainEnvelopeModel)
 from ._client_factory import k8s_extension_client_factory
-from ._up_utils import format_location
 
 logger = get_logger(__name__)
 
@@ -1523,7 +1522,10 @@ def _validate_connected_k8s(cmd, connected_cluster_id=None):
         raise ValidationError(
             '{} is not a connectedCluster resource ID.'.format(connected_cluster_id)
         )
-    connected_cluster = get_connected_k8s(cmd, connected_cluster_id=connected_cluster_id)
+    try:
+        connected_cluster = get_connected_k8s(cmd, connected_cluster_id=connected_cluster_id)
+    except:
+        raise ResourceNotFoundError("Cannot find connected cluster with connected cluster ID {}".format(connected_cluster_id))
 
 
 def get_custom_location(cmd, custom_location):
@@ -1608,8 +1610,11 @@ def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id
 
 
 def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns',
-                     connected_environment_name=None, log_customer_id=None, log_share_key=None):
+                     connected_environment_name=None, logs_customer_id=None, logs_key=None, location=None, resource_group_name=None):
     from azure.mgmt.kubernetesconfiguration import models
+
+    if logs_customer_id is None or logs_key is None:
+        logs_customer_id, logs_key = _generate_log_analytics_if_not_provided(cmd, logs_customer_id, logs_key, location, resource_group_name)
 
     parsed_extension = parse_resource_id(connected_cluster_id)
     subscription = parsed_extension.get("subscription")
@@ -1632,8 +1637,8 @@ def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns'
         "logProcessor.appLogs.destination": "log-analytics"
     }
 
-    b64_customer_id = b64encode(bytes(log_customer_id, 'utf-8')).decode("utf-8")
-    b64_share_key = b64encode(bytes(log_share_key, 'utf-8')).decode("utf-8")
+    b64_customer_id = b64encode(bytes(logs_customer_id, 'utf-8')).decode("utf-8")
+    b64_share_key = b64encode(bytes(logs_key, 'utf-8')).decode("utf-8")
     e.configuration_protected_settings = {
         "logProcessor.appLogs.logAnalyticsConfig.customerId": b64_customer_id,
         "logProcessor.appLogs.logAnalyticsConfig.sharedKey": b64_share_key

@@ -2513,8 +2513,8 @@ def containerapp_up(cmd,
     ingress, target_port = _get_ingress_and_target_port(ingress, target_port, dockerfile_content)
 
     resource_group = ResourceGroup(cmd, name=resource_group_name, location=location)
-    custom_location_resource = CustomLocation(cmd, name=custom_location, connected_cluster_id=connected_cluster_id)
-    env = ContainerAppEnvironment(cmd, env, resource_group, location=location, logs_key=logs_key, logs_customer_id=logs_customer_id, custom_location=custom_location_resource, connected_cluster_id=connected_cluster_id)
+    custom_location_resource = CustomLocation(cmd, name=custom_location, resource_group=resource_group, connected_cluster_id=connected_cluster_id)
+    env = ContainerAppEnvironment(cmd, env, resource_group, location=location, logs_key=logs_key, logs_customer_id=logs_customer_id, custom_location=custom_location_resource)
     app = ContainerApp(cmd, name, resource_group, None, image, env, target_port, registry_server, registry_user, registry_pass, env_vars, ingress)
 
     _set_up_defaults(cmd, name, resource_group_name, logs_customer_id, location, custom_location, connected_cluster_id, resource_group, env, app)
@@ -2526,7 +2526,7 @@ def containerapp_up(cmd,
     resource_group.create_if_needed()
     if env.resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
         if env.custom_location.cluster_extension_id is None:
-            extension = create_extension(cmd=cmd, connected_environment_name=env.name, log_customer_id=logs_customer_id, log_share_key=logs_key)
+            extension = create_extension(cmd=cmd, connected_environment_name=env.name, logs_customer_id=logs_customer_id, logs_share_key=logs_key, location=env.location, resource_group_name=resource_group.name)
             custom_location_resource.cluster_extension_id = extension.id
             custom_location_resource.namespace = extension.namespace
         custom_location_resource.create_if_needed(name)
@@ -2554,16 +2554,16 @@ def containerapp_up(cmd,
     up_output(app)
 
 
-def containerapp_up_logic(cmd, resource_group_name, name, env, image, env_vars, ingress, target_port, registry_server, registry_user, registry_pass):
+def containerapp_up_logic(cmd, resource_group_name, name, env, env_resource_type, image, env_vars, ingress, target_port, registry_server, registry_user, registry_pass):
     containerapp_def = None
     try:
         containerapp_def = ContainerAppClient.show(cmd=cmd, resource_group_name=resource_group_name, name=name)
     except:
         pass
-
+    environment_type = "connected" if env_resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower() else "managed"
     if containerapp_def:
         return update_containerapp_logic(cmd=cmd, name=name, resource_group_name=resource_group_name, image=image, replace_env_vars=env_vars, ingress=ingress, target_port=target_port, registry_server=registry_server, registry_user=registry_user, registry_pass=registry_pass, container_name=name)
-    return create_containerapp(cmd=cmd, name=name, resource_group_name=resource_group_name, env=env, image=image, env_vars=env_vars, ingress=ingress, target_port=target_port, registry_server=registry_server, registry_user=registry_user, registry_pass=registry_pass)
+    return create_containerapp(cmd=cmd, name=name, resource_group_name=resource_group_name, env=env, environment_type=environment_type, image=image, env_vars=env_vars, ingress=ingress, target_port=target_port, registry_server=registry_server, registry_user=registry_user, registry_pass=registry_pass)
 
 
 def list_certificates(cmd, name, resource_group_name, location=None, certificate=None, thumbprint=None):
