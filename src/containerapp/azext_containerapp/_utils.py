@@ -1610,11 +1610,11 @@ def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id
 
 
 def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns',
-                     connected_environment_name=None, logs_customer_id=None, logs_key=None, location=None, resource_group_name=None):
+                     connected_environment_name=None, logs_customer_id=None, logs_share_key=None, location=None, logs_rg=None):
     from azure.mgmt.kubernetesconfiguration import models
 
-    if logs_customer_id is None or logs_key is None:
-        logs_customer_id, logs_key = _generate_log_analytics_if_not_provided(cmd, logs_customer_id, logs_key, location, resource_group_name)
+    if logs_customer_id is None or logs_share_key is None:
+        logs_customer_id, logs_share_key = _generate_log_analytics_if_not_provided(cmd, logs_customer_id, logs_share_key, location, logs_rg)
 
     parsed_extension = parse_resource_id(connected_cluster_id)
     subscription = parsed_extension.get("subscription")
@@ -1638,11 +1638,14 @@ def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns'
     }
 
     b64_customer_id = b64encode(bytes(logs_customer_id, 'utf-8')).decode("utf-8")
-    b64_share_key = b64encode(bytes(logs_key, 'utf-8')).decode("utf-8")
+    b64_share_key = b64encode(bytes(logs_share_key, 'utf-8')).decode("utf-8")
     e.configuration_protected_settings = {
         "logProcessor.appLogs.logAnalyticsConfig.customerId": b64_customer_id,
         "logProcessor.appLogs.logAnalyticsConfig.sharedKey": b64_share_key
     }
+    logger.warning(
+        f"Creating Extension {ext_name} for cluster {connected_cluster_id}"
+    )
     poller = k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription).begin_create(resource_group_name=cluster_rg,
                                                                     cluster_rp=cluster_rp,
                                                                     cluster_resource_name=cluster_type,

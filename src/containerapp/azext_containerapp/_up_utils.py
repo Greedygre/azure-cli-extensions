@@ -50,7 +50,8 @@ from ._utils import (
     list_cluster_extensions, get_connected_k8s,
 )
 
-from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, MAXIMUM_CONTAINER_APP_NAME_LENGTH, MANAGED_ENVIRONMENT_TYPE, CONNECTED_ENVIRONMENT_TYPE, CUSTOM_LOCATION_RP
+from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, \
+    MAXIMUM_CONTAINER_APP_NAME_LENGTH, MANAGED_ENVIRONMENT_TYPE, CONNECTED_ENVIRONMENT_TYPE, CUSTOM_LOCATION_RP
 
 from .custom import (
     create_connected_environment,
@@ -144,114 +145,6 @@ class Resource:
         return self.exists
 
 
-class ContainerAppEnvironment(Resource):
-    def __init__(
-        self,
-        cmd,
-        name: str,
-        resource_group: "ResourceGroup",
-        custom_location: "CustomLocation",
-        exists: bool = None,
-        location=None,
-        logs_key=None,
-        logs_customer_id=None,
-        resource_type=None,
-    ):
-
-        super().__init__(cmd, name, resource_group, exists)
-        self.resource_type = resource_type
-        if is_valid_resource_id(name):
-            env_dict = parse_resource_id(name)
-            self.name = env_dict["name"]
-            if "resource_group" in env_dict:
-                rg = env_dict["resource_group"]
-                if resource_group.name != rg:
-                    self.resource_group = ResourceGroup(cmd, rg, location)
-            if "resource_type" in env_dict:
-                self.resource_type = env_dict["resource_type"]
-        if self.resource_type is None:
-            if custom_location.connected_cluster_id or custom_location.name:
-                self.resource_type = CONNECTED_ENVIRONMENT_TYPE
-        self.location = location
-        self.logs_key = logs_key
-        self.logs_customer_id = logs_customer_id
-        self.custom_location = custom_location
-
-    def set_name(self, name_or_rid):
-        if is_valid_resource_id(name_or_rid):
-            parse_env = parse_resource_id(name_or_rid)
-            self.name = parse_env["name"]
-            self.resource_type = parse_env["resource_type"]
-            if "resource_group" in parse_env:
-                rg = parse_env["resource_group"]
-                if self.resource_group.name != rg:
-                    self.resource_group = ResourceGroup(
-                        self.cmd,
-                        rg,
-                        self.location,
-                    )
-        else:
-            self.name = name_or_rid
-
-    def _get(self):
-        if self.resource_type and self.resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
-            return ConnectedEnvironmentClient.show(
-                self.cmd, self.resource_group.name, self.name
-            )
-        return ManagedEnvironmentClient.show(
-            self.cmd, self.resource_group.name, self.name
-        )
-
-    def create_if_needed(self, app_name):
-        if not self.check_exists():
-            if self.name is None:
-                self.name = "{}-env".format(app_name).replace("_", "-")
-            logger.warning(
-                f"Creating {type(self).__name__} '{self.name}' in resource group {self.resource_group.name}"
-            )
-            self.create()
-        else:
-            logger.warning(
-                f"Using {type(self).__name__} '{self.name}' in resource group {self.resource_group.name}"
-            )  # TODO use .info()
-
-    def create(self):
-        self.location = validate_environment_location(self.cmd, self.location)
-        register_provider_if_needed(self.cmd, LOG_ANALYTICS_RP)
-        if self.resource_type and self.resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
-            env = create_connected_environment(
-                self.cmd,
-                self.name,
-                location=self.location,
-                custom_location=self.custom_location.get_rid(),
-                resource_group_name=self.resource_group.name,
-            )
-        else:
-            env = create_managed_environment(
-                self.cmd,
-                self.name,
-                location=self.location,
-                resource_group_name=self.resource_group.name,
-                logs_key=self.logs_key,
-                logs_customer_id=self.logs_customer_id,
-                disable_warnings=True,
-            )
-        self.exists = True
-        return env
-
-    def get_rid(self):
-        rid = self.name
-        if not is_valid_resource_id(self.name):
-            rid = resource_id(
-                subscription=get_subscription_id(self.cmd.cli_ctx),
-                resource_group=self.resource_group.name,
-                namespace=CONTAINER_APPS_RP,
-                type=self.resource_type if self.resource_type else "managedEnvironments",
-                name=self.name,
-            )
-        return rid
-
-
 class CustomLocation(Resource):
     def __init__(
         self,
@@ -303,14 +196,14 @@ class CustomLocation(Resource):
         self.exists = True
         return custom_location
 
-    def create_if_needed(self, env_name, logs_customer_id, logs_share_key):
+    def create_if_needed(self, env_name, logs_customer_id, logs_share_key, logs_rg):
         if not self.check_exists():
             if self.name is None:
                 self.name = get_randomized_name_with_dash(prefix=get_profile_username(), initial="env-location")
             if self.cluster_extension_id is None:
-                extension = create_extension(cmd=self.cmd, connected_environment_name=env_name,
+                extension = create_extension(cmd=self.cmd, connected_cluster_id=self.connected_cluster_id, connected_environment_name=env_name,
                                              logs_customer_id=logs_customer_id, logs_share_key=logs_share_key,
-                                             location=self.location, resource_group_name=self.resource_group.name)
+                                             location=self.location, logs_rg=logs_rg)
                 self.cluster_extension_id = extension.id
                 self.namespace = extension.namespace
             if self.namespace is None:
@@ -327,7 +220,6 @@ class CustomLocation(Resource):
     def _get(self):
         return get_custom_location(self.cmd, custom_location=self.name)
 
-
     def get_rid(self):
         rid = self.name
         if not is_valid_resource_id(self.name):
@@ -336,6 +228,119 @@ class CustomLocation(Resource):
                 resource_group=self.resource_group.name,
                 namespace=CUSTOM_LOCATION_RP,
                 type="customlocations",
+                name=self.name,
+            )
+        return rid
+
+
+class ContainerAppEnvironment(Resource):
+    def __init__(
+        self,
+        cmd,
+        name: str,
+        resource_group: "ResourceGroup",
+        custom_location: "CustomLocation",
+        exists: bool = None,
+        location=None,
+        logs_key=None,
+        logs_customer_id=None,
+        resource_type=None,
+    ):
+
+        super().__init__(cmd, name, resource_group, exists)
+        self.resource_type = resource_type
+        if is_valid_resource_id(name):
+            env_dict = parse_resource_id(name)
+            self.name = env_dict["name"]
+            if "resource_group" in env_dict:
+                rg = env_dict["resource_group"]
+                if resource_group.name != rg:
+                    self.resource_group = ResourceGroup(cmd, rg, location)
+            if "resource_type" in env_dict:
+                self.resource_type = env_dict["resource_type"]
+        if self.resource_type is None:
+            if custom_location.connected_cluster_id or custom_location.name:
+                self.resource_type = CONNECTED_ENVIRONMENT_TYPE
+        self.location = location
+        self.logs_key = logs_key
+        self.logs_customer_id = logs_customer_id
+        self.custom_location = custom_location
+
+    def set_name(self, name_or_rid):
+        if is_valid_resource_id(name_or_rid):
+            env_dict = parse_resource_id(name_or_rid)
+            self.name = env_dict["name"]
+            self.resource_type = env_dict["resource_type"]
+            if "resource_group" in env_dict:
+                rg = env_dict["resource_group"]
+                if self.resource_group.name != rg:
+                    self.resource_group = ResourceGroup(
+                        self.cmd,
+                        rg,
+                        self.location,
+                    )
+        else:
+            self.name = name_or_rid
+
+    def is_connected_environment_type(self):
+        if self.resource_type and self.resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
+            return True
+        return False
+
+    def _get(self):
+        if self.is_connected_environment_type():
+            return ConnectedEnvironmentClient.show(
+                self.cmd, self.resource_group.name, self.name
+            )
+        return ManagedEnvironmentClient.show(
+            self.cmd, self.resource_group.name, self.name
+        )
+
+    def create_if_needed(self, app_name):
+        if not self.check_exists():
+            if self.name is None:
+                self.name = "{}-env".format(app_name).replace("_", "-")
+            logger.warning(
+                f"Creating {type(self).__name__} '{self.name}' in resource group {self.resource_group.name}"
+            )
+            self.create()
+        else:
+            logger.warning(
+                f"Using {type(self).__name__} '{self.name}' in resource group {self.resource_group.name}"
+            )  # TODO use .info()
+
+    def create(self):
+        self.location = validate_environment_location(self.cmd, self.location)
+        register_provider_if_needed(self.cmd, LOG_ANALYTICS_RP)
+        if self.is_connected_environment_type():
+            env = create_connected_environment(
+                self.cmd,
+                self.name,
+                location=self.location,
+                custom_location=self.custom_location.get_rid(),
+                resource_group_name=self.resource_group.name,
+            )
+        else:
+            env = create_managed_environment(
+                self.cmd,
+                self.name,
+                location=self.location,
+                resource_group_name=self.resource_group.name,
+                logs_key=self.logs_key,
+                logs_customer_id=self.logs_customer_id,
+                disable_warnings=True,
+            )
+        self.exists = True
+        return env
+
+    def get_rid(self):
+        rid = self.name
+        if not is_valid_resource_id(self.name):
+            rid = resource_id(
+                subscription=get_subscription_id(self.cmd.cli_ctx),
+                resource_group=self.resource_group.name,
+                namespace=CONTAINER_APPS_RP,
+                type=self.resource_type if self.resource_type else "managedEnvironments",
                 name=self.name,
             )
         return rid
@@ -398,7 +403,7 @@ class ContainerApp(Resource):  # pylint: disable=too-many-instance-attributes
             resource_group_name=self.resource_group.name,
             image=self.image,
             env=self.env.get_rid(),
-            env_resource_type=self.env.resource_type,
+            is_connected_environment_type=self.env.is_connected_environment_type(),
             target_port=self.target_port,
             registry_server=None if no_registry else self.registry_server,
             registry_pass=None if no_registry else self.registry_pass,
@@ -882,7 +887,7 @@ def _set_up_defaults(
 
     env_list = []
     # try to set RG name by env name
-    if env.name and not resource_group.name and env.resource_type.lower() != CONNECTED_ENVIRONMENT_TYPE.lower():
+    if env.name and not resource_group.name and not env.is_connected_environment_type():
         if not location:
             env_list = [e for e in list_managed_environments(cmd=cmd) if e["name"] == env.name]
         else:
@@ -896,7 +901,7 @@ def _set_up_defaults(
                 "Please specify which resource group your Containerapp environment is in."
             )    # get ACR details from --image, if possible
     # try to set env and RG
-    if env.resource_type and env.resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower() and (not env.name or not resource_group.name):
+    if env.is_connected_environment_type() and (not env.name or not resource_group.name):
         connected_env_list = list_connected_environments(cmd=cmd, resource_group_name=resource_group_name)
         for e in connected_env_list:
             if env.name and env.name != e["name"]:
@@ -926,7 +931,7 @@ def _set_up_defaults(
                 env.set_name(env_list[0]["id"])
                 env.custom_location.name = env_list[0]["extendedLocation"]["name"]
 
-    if env.resource_type and env.resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
+    if env.is_connected_environment_type():
         _get_custom_location_and_extension_id_and_location_from_cluster(cmd, env=env)
 
     _get_acr_from_image(cmd, app)
