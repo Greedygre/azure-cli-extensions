@@ -340,7 +340,7 @@ class ContainerAppEnvironment(Resource):
                 subscription=get_subscription_id(self.cmd.cli_ctx),
                 resource_group=self.resource_group.name,
                 namespace=CONTAINER_APPS_RP,
-                type=self.resource_type if self.resource_type else "managedEnvironments",
+                type=self.resource_type if self.resource_type else MANAGED_ENVIRONMENT_TYPE,
                 name=self.name,
             )
         return rid
@@ -641,13 +641,13 @@ def _get_app_env_and_group(
         if env.custom_location.name:
             matched_apps = [c for c in matched_apps if c["extendedLocation"]["name"].lower() == env.custom_location.name.lower()]
         if location:
-            matched_apps = [c for c in matched_apps if format_location(["location"]) == format_location(location)]
+            matched_apps = [c for c in matched_apps if format_location(c["location"]) == format_location(location)]
         if len(matched_apps) == 1:
             resource_group.name = parse_resource_id(matched_apps[0]["id"])[
                 "resource_group"
             ]
             env.set_name(matched_apps[0]["properties"]["environmentId"])
-            if env.resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
+            if env.is_connected_environment_type():
                 env.custom_location.name = matched_apps[0]["extendedLocation"]["name"]
         elif len(matched_apps) > 1:
             raise ValidationError(
@@ -689,9 +689,9 @@ def _get_env_and_group_from_log_analytics(
                 env_list = [e for e in env_list if e["location"] == location]
             if env_list:
                 # TODO check how many CA in env
-                env_details = parse_resource_id(env_list[0]["id"])
+                # set_name() with parse name and resource_group from environment id
                 env.set_name(env_list[0]["id"])
-                resource_group.name = env_details["resource_group"]
+                resource_group.name = env.resource_group.name
 
 
 def _get_custom_location_and_extension_id_and_location_from_cluster(
@@ -880,7 +880,7 @@ def _set_up_defaults(
     _get_app_env_and_group(cmd, name, resource_group, env, location)
 
     # If no env passed in (and not creating a new RG), then try getting an env by location / log analytics ID
-    if custom_location is None and connected_cluster_id is None:
+    if not env.is_connected_environment_type():
         _get_env_and_group_from_log_analytics(
             cmd, resource_group_name, env, resource_group, logs_customer_id, location
         )
@@ -1087,16 +1087,16 @@ def check_env_name_on_rg(cmd, env, resource_group_name, location, custom_locatio
     env_dict = parse_resource_id(env)
     env_name = env_dict.get("name")
     resource_type = env_dict.get("resource_type")
+    if resource_type is None:
+        if custom_location or connected_cluster_id:
+            resource_type = CONNECTED_ENVIRONMENT_TYPE
+
     # If the environment resource-id is not an existing resource, only support managed, follow the current behavior. Failed if the resource is connected.
     if is_valid_rid and resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower() and custom_location is None and connected_cluster_id is None:
         env_def = ConnectedEnvironmentClient.show(cmd, env_dict.get("resource_group"), env_name)
         if env_def is None:
             raise ValidationError(
                 "Connected Environment {} does not exist on the subscription.".format(env))
-
-    if resource_type is None:
-        if custom_location or connected_cluster_id:
-            resource_type = CONNECTED_ENVIRONMENT_TYPE
 
     if location:
         _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "managedEnvironments")
@@ -1119,7 +1119,7 @@ def check_env_name_on_rg(cmd, env, resource_group_name, location, custom_locatio
                 raise ValidationError(
                     "Environment {} already exists in resource group {} on location {}, cannot change location of existing environment to {}.".format(
                         env_name, resource_group_name, env_def["location"], location))
-            if CONNECTED_ENVIRONMENT_TYPE.lower() == resource_type.lower():
+            if resource_type and CONNECTED_ENVIRONMENT_TYPE.lower() == resource_type.lower():
                 if custom_location and env_def["extendedLocation"]["name"].lower() != custom_location.lower():
                     raise ValidationError(
                         "Environment {} already exists in resource group {} with custom location {}, cannot change custom location of existing environment to {}.".format(

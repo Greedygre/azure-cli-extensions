@@ -23,7 +23,9 @@ from knack.log import get_logger
 from msrestazure.tools import parse_resource_id, is_valid_resource_id, resource_id
 
 from ._clients import ContainerAppClient, ManagedEnvironmentClient, ConnectedEnvironmentClient
-from ._client_factory import handle_raw_exception, providers_client_factory, cf_resource_groups, log_analytics_client_factory, log_analytics_shared_key_client_factory
+from ._client_factory import handle_raw_exception, providers_client_factory, cf_resource_groups, \
+    log_analytics_client_factory, log_analytics_shared_key_client_factory, customlocation_client_factory, \
+    connected_k8s_client_factory
 from ._constants import (MAXIMUM_CONTAINER_APP_NAME_LENGTH, SHORT_POLLING_INTERVAL_SECS, LONG_POLLING_INTERVAL_SECS,
                          LOG_ANALYTICS_RP, CONTAINER_APPS_RP, CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, ACR_IMAGE_SUFFIX,
                          CONNECTED_ENV_CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, CONNECTED_CLUSTER_TYPE, CUSTOM_LOCATION_RP, KUBERNETES_RP, KUBERNETES_CONFIGURATION_RP)
@@ -1450,38 +1452,39 @@ def set_managed_identity(cmd, resource_group_name, containerapp_def, system_assi
                 containerapp_def["identity"]["userAssignedIdentities"][r] = {}
 
 
-def validate_connected_k8s_and_custom_location(cmd, location=None, env=None, custom_location=None, connected_cluster_id=None):
+def validate_connected_k8s_and_custom_location(cmd, location=None, env=None, custom_location=None, connected_cluster_id=None, env_rg=None):
     register_provider_if_needed(cmd, CUSTOM_LOCATION_RP)
     register_provider_if_needed(cmd, KUBERNETES_CONFIGURATION_RP)
     if location:
         _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "connectedEnvironments")
     if custom_location:
-        _validate_custom_loc_and_location(cmd, env, custom_location, connected_cluster_id)
+        _validate_custom_loc_and_location(cmd, env, custom_location, connected_cluster_id, env_rg)
     if connected_cluster_id:
         _validate_connected_k8s(cmd, connected_cluster_id)
 
 
-def _validate_custom_loc_and_location(cmd, env=None, custom_location=None, connected_cluster_id=None):
-    from ._client_factory import customlocation_client_factory
+def _validate_custom_loc_and_location(cmd, env=None, custom_location=None, connected_cluster_id=None, env_rg=None):
     from ._up_utils import list_connected_environments
 
     if not is_valid_resource_id(custom_location):
         raise ValidationError(
             '{} is not a valid Azure resource ID.'.format(custom_location)
         )
-    parsed_custom_loc = parse_resource_id(custom_location)
-    subscription_id = parsed_custom_loc.get("subscription")
-    custom_loc_name = parsed_custom_loc["name"]
-    custom_loc_rg = parsed_custom_loc["resource_group"]
+
     try:
-        r = customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).custom_locations.get(resource_group_name=custom_loc_rg,
-                                                                            resource_name=custom_loc_name)
+        r = get_custom_location(cmd=cmd, custom_location=custom_location)
     except:
         raise ResourceNotFoundError("Cannot find Custom location with custom location ID {}".format(custom_location))
 
+    if connected_cluster_id:
+        if connected_cluster_id.lower() != r.host_resource_id.lower():
+            raise ValidationError(
+                'Custom location {} not in cluster {}.'.format(custom_location, connected_cluster_id))
+
     # check env
     if env:
-        env_list = [e for e in list_connected_environments(cmd=cmd, custom_location=custom_location) if
+        env_list = [e for e in
+                    list_connected_environments(cmd=cmd, resource_group_name=env_rg, custom_location=custom_location) if
                     (e["id"].lower() != env.lower() and e["name"] != env)]
         if len(env_list) > 0:
             raise ValidationError(
@@ -1492,7 +1495,8 @@ def _validate_custom_loc_and_location(cmd, env=None, custom_location=None, conne
     # check extension type
     if len(r.cluster_extension_ids) == 0:
         raise ValidationError(
-            'Custom location {} cluster-extension-ids not contain the Microsoft.App.Environment extension.'.format(custom_location)
+            'Custom location {} cluster-extension-ids not contain the Microsoft.App.Environment extension.'.format(
+                custom_location)
         )
     check_extension_type = False
     for extension_id in r.cluster_extension_ids:
@@ -1502,12 +1506,10 @@ def _validate_custom_loc_and_location(cmd, env=None, custom_location=None, conne
             break
     if not check_extension_type:
         raise ValidationError(
-            'Custom location {} cluster-extension-ids not contain the Microsoft.App.Environment extension.'.format(custom_location)
+            'Custom location {} cluster-extension-ids not contain the Microsoft.App.Environment extension.'.format(
+                custom_location)
         )
-    if connected_cluster_id:
-        if connected_cluster_id.lower() != r.host_resource_id.lower():
-            raise ValidationError(
-                'Custom location {} not in cluster {}.'.format(custom_location, connected_cluster_id))
+
     return r.location
 
 
@@ -1525,26 +1527,25 @@ def _validate_connected_k8s(cmd, connected_cluster_id=None):
     try:
         connected_cluster = get_connected_k8s(cmd, connected_cluster_id=connected_cluster_id)
     except:
-        raise ResourceNotFoundError("Cannot find connected cluster with connected cluster ID {}".format(connected_cluster_id))
+        raise ResourceNotFoundError(
+            "Cannot find connected cluster with connected cluster ID {}".format(connected_cluster_id))
 
 
 def get_custom_location(cmd, custom_location):
-    from ._client_factory import customlocation_client_factory
     parsed_custom_loc = parse_resource_id(custom_location)
     subscription_id = parsed_custom_loc.get("subscription")
     custom_loc_name = parsed_custom_loc["name"]
     custom_loc_rg = parsed_custom_loc["resource_group"]
-    return customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).custom_locations.get(resource_group_name=custom_loc_rg,
-                                                                        resource_name=custom_loc_name)
+    return customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).get(
+        resource_group_name=custom_loc_rg,
+        resource_name=custom_loc_name)
 
 
 def list_custom_location(cmd, resource_group=None, connected_cluster_id=None):
-    from ._client_factory import customlocation_client_factory
     if resource_group:
-        r = customlocation_client_factory(cmd.cli_ctx).custom_locations.list_by_resource_group(
-            resource_group_name=resource_group)
+        r = customlocation_client_factory(cmd.cli_ctx).list_by_resource_group(resource_group_name=resource_group)
     else:
-        r = customlocation_client_factory(cmd.cli_ctx).custom_locations.list_by_subscription()
+        r = customlocation_client_factory(cmd.cli_ctx).list_by_subscription()
 
     custom_location_list = []
     for e in r:
@@ -1557,8 +1558,8 @@ def list_custom_location(cmd, resource_group=None, connected_cluster_id=None):
 
 def create_custom_location(cmd, custom_location_name=None, resource_group=None, connected_cluster_id=None,
                            namespace='containerapp-ns', cluster_extension_id=None, location=None):
-    from ._client_factory import customlocation_client_factory
     from azure.mgmt.extendedlocation import models
+
     parsed_cluster = parse_resource_id(connected_cluster_id)
     subscription_id = parsed_cluster.get("subscription")
     cluster_loc_rg = parsed_cluster["resource_group"]
@@ -1567,7 +1568,7 @@ def create_custom_location(cmd, custom_location_name=None, resource_group=None, 
     c = models.CustomLocation(name=custom_location_name, location=location,
                               cluster_extension_ids=[cluster_extension_id], host_resource_id=connected_cluster_id,
                               namespace=namespace, host_type=models.HostType.KUBERNETES)
-    poller = customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).custom_locations.begin_create_or_update(
+    poller = customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).begin_create_or_update(
         resource_group_name=resource_group, resource_name=custom_location_name, parameters=c)
     custom_location = LongRunningOperation(cmd.cli_ctx)(poller)
     return custom_location
@@ -1583,11 +1584,11 @@ def get_cluster_extension(cmd, cluster_extension_id=None):
     resource_name = parsed_extension.get("resource_name")
 
     return k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription_id).get(
-            resource_group_name=cluster_rg,
-            cluster_rp=cluster_rp,
-            cluster_resource_name=cluster_type,
-            cluster_name=cluster_name,
-            extension_name=resource_name)
+        resource_group_name=cluster_rg,
+        cluster_rp=cluster_rp,
+        cluster_resource_name=cluster_type,
+        cluster_name=cluster_name,
+        extension_name=resource_name)
 
 
 def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id=None):
@@ -1602,19 +1603,22 @@ def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id
     cluster_rp = parsed_extension.get("namespace")
     cluster_type = parsed_extension.get("type")
     cluster_name = parsed_extension.get("name")
-    extension_list = k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription_id).list(resource_group_name=cluster_rg,
-                                                                    cluster_rp=cluster_rp,
-                                                                    cluster_resource_name=cluster_type,
-                                                                    cluster_name=cluster_name)
+    extension_list = k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription_id).list(
+        resource_group_name=cluster_rg,
+        cluster_rp=cluster_rp,
+        cluster_resource_name=cluster_type,
+        cluster_name=cluster_name)
     return extension_list
 
 
 def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns',
-                     connected_environment_name=None, logs_customer_id=None, logs_share_key=None, location=None, logs_rg=None):
+                     connected_environment_name=None, logs_customer_id=None, logs_share_key=None, location=None,
+                     logs_rg=None):
     from azure.mgmt.kubernetesconfiguration import models
 
     if logs_customer_id is None or logs_share_key is None:
-        logs_customer_id, logs_share_key = _generate_log_analytics_if_not_provided(cmd, logs_customer_id, logs_share_key, location, logs_rg)
+        logs_customer_id, logs_share_key = _generate_log_analytics_if_not_provided(cmd, logs_customer_id,
+                                                                                   logs_share_key, location, logs_rg)
 
     parsed_extension = parse_resource_id(connected_cluster_id)
     subscription = parsed_extension.get("subscription")
@@ -1646,20 +1650,20 @@ def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns'
     logger.warning(
         f"Creating Extension {ext_name} for cluster {connected_cluster_id}"
     )
-    poller = k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription).begin_create(resource_group_name=cluster_rg,
-                                                                    cluster_rp=cluster_rp,
-                                                                    cluster_resource_name=cluster_type,
-                                                                    cluster_name=cluster_name, extension_name=ext_name,
-                                                                    extension=e)
+    poller = k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription).begin_create(
+        resource_group_name=cluster_rg,
+        cluster_rp=cluster_rp,
+        cluster_resource_name=cluster_type,
+        cluster_name=cluster_name, extension_name=ext_name,
+        extension=e)
     extension = LongRunningOperation(cmd.cli_ctx)(poller)
     return extension
 
 
 def get_connected_k8s(cmd, connected_cluster_id=None):
-    from ._client_factory import connected_k8s_client_factory
-
     parsed_connected_cluster = parse_resource_id(connected_cluster_id)
     subscription = parsed_connected_cluster.get("subscription")
     cluster_rg = parsed_connected_cluster.get("resource_group")
     cluster_name = parsed_connected_cluster.get("name")
-    return connected_k8s_client_factory(cmd.cli_ctx, subscription_id=subscription).get(resource_group_name=cluster_rg, cluster_name=cluster_name)
+    return connected_k8s_client_factory(cmd.cli_ctx, subscription_id=subscription).get(resource_group_name=cluster_rg,
+                                                                                       cluster_name=cluster_name)

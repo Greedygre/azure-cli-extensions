@@ -79,7 +79,8 @@ def customlocation_client_factory(cli_ctx, api_version=None, subscription_id=Non
     from azure.cli.core.profiles import ResourceType
     from azure.cli.core.commands.client_factory import get_mgmt_service_client
 
-    return get_mgmt_service_client(cli_ctx, ResourceType.MGMT_CUSTOMLOCATION, api_version=api_version, subscription_id=subscription_id)
+    return get_mgmt_service_client(cli_ctx, ResourceType.MGMT_CUSTOMLOCATION, api_version=api_version,
+                                   subscription_id=subscription_id).custom_locations
 
 
 def k8s_extension_client_factory(cli_ctx, subscription_id=None):
@@ -92,4 +93,5 @@ def k8s_extension_client_factory(cli_ctx, subscription_id=None):
 def connected_k8s_client_factory(cli_ctx, subscription_id=None):
     from azure.mgmt.hybridkubernetes import ConnectedKubernetesClient
 
-    return get_mgmt_service_client(cli_ctx, ConnectedKubernetesClient, subscription_id=subscription_id).connected_cluster
+    return get_mgmt_service_client(cli_ctx, ConnectedKubernetesClient,
+                                   subscription_id=subscription_id).connected_cluster

@@ -92,7 +92,10 @@ def validate_custom_location_name_or_id(cmd, namespace):
     from azure.cli.core.commands.client_factory import get_subscription_id
     from msrestazure.tools import is_valid_resource_id, resource_id
 
-    if namespace.custom_location and namespace.resource_group_name and not is_valid_resource_id(namespace.custom_location):
+    if not namespace.custom_location or not namespace.resource_group_name:
+        return
+
+    if not is_valid_resource_id(namespace.custom_location):
         namespace.custom_location = resource_id(
             subscription=get_subscription_id(cmd.cli_ctx),
             resource_group=namespace.resource_group_name,

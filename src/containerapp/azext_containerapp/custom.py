@@ -2493,7 +2493,7 @@ def containerapp_up(cmd,
     _validate_up_args(cmd, source, image, repo, registry_server)
     validate_container_app_name(name)
     if custom_location or connected_cluster_id:
-        validate_connected_k8s_and_custom_location(cmd, location, env, custom_location, connected_cluster_id)
+        validate_connected_k8s_and_custom_location(cmd, location, env, custom_location, connected_cluster_id, resource_group_name)
 
     check_env_name_on_rg(cmd, env, resource_group_name, location, custom_location, connected_cluster_id)
 
