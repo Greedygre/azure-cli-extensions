@@ -1482,7 +1482,7 @@ def _validate_custom_loc_and_location(cmd, env=None, custom_location=None, conne
     # check env
     if env:
         env_list = [e for e in list_connected_environments(cmd=cmd, custom_location=custom_location) if
-                    (e["id"].lower() != env and e["name"] != env)]
+                    (e["id"].lower() != env.lower() and e["name"] != env)]
         if len(env_list) > 0:
             raise ValidationError(
                 'There is existed environment {} with custom domain {} on the subscription. \n Please specify which resource group your Connected environment is in.'.format(

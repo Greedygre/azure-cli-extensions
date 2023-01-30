@@ -2524,12 +2524,8 @@ def containerapp_up(cmd,
             raise ValidationError("Containerapp has an existing provisioning in progress. Please wait until provisioning has completed and rerun the command.")
 
     resource_group.create_if_needed()
-    if env.resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
-        if env.custom_location.cluster_extension_id is None:
-            extension = create_extension(cmd=cmd, connected_environment_name=env.name, logs_customer_id=logs_customer_id, logs_share_key=logs_key, location=env.location, resource_group_name=resource_group.name)
-            custom_location_resource.cluster_extension_id = extension.id
-            custom_location_resource.namespace = extension.namespace
-        custom_location_resource.create_if_needed(name)
+    if env.resource_type and env.resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
+        custom_location_resource.create_if_needed(env_name=env.name, logs_customer_id=logs_customer_id, logs_share_key=logs_key)
     env.create_if_needed(name)
 
     if source or repo:
@@ -2560,7 +2556,7 @@ def containerapp_up_logic(cmd, resource_group_name, name, env, env_resource_type
         containerapp_def = ContainerAppClient.show(cmd=cmd, resource_group_name=resource_group_name, name=name)
     except:
         pass
-    environment_type = "connected" if env_resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower() else "managed"
+    environment_type = "connected" if env_resource_type and env_resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower() else "managed"
     if containerapp_def:
         return update_containerapp_logic(cmd=cmd, name=name, resource_group_name=resource_group_name, image=image, replace_env_vars=env_vars, ingress=ingress, target_port=target_port, registry_server=registry_server, registry_user=registry_user, registry_pass=registry_pass, container_name=name)
     return create_containerapp(cmd=cmd, name=name, resource_group_name=resource_group_name, env=env, environment_type=environment_type, image=image, env_vars=env_vars, ingress=ingress, target_port=target_port, registry_server=registry_server, registry_user=registry_user, registry_pass=registry_pass)
