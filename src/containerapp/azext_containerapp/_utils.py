@@ -1452,17 +1452,6 @@ def set_managed_identity(cmd, resource_group_name, containerapp_def, system_assi
                 containerapp_def["identity"]["userAssignedIdentities"][r] = {}
 
 
-def validate_connected_k8s_and_custom_location(cmd, location=None, env=None, custom_location=None, connected_cluster_id=None, env_rg=None):
-    register_provider_if_needed(cmd, CUSTOM_LOCATION_RP)
-    register_provider_if_needed(cmd, KUBERNETES_CONFIGURATION_RP)
-    if location:
-        _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "connectedEnvironments")
-    if custom_location:
-        _validate_custom_loc_and_location(cmd, env, custom_location, connected_cluster_id, env_rg)
-    if connected_cluster_id:
-        _validate_connected_k8s(cmd, connected_cluster_id)
-
-
 def _validate_custom_loc_and_location(cmd, custom_location=None, env=None, connected_cluster_id=None, env_rg=None):
     from ._up_utils import list_connected_environments
 
@@ -1488,7 +1477,7 @@ def _validate_custom_loc_and_location(cmd, custom_location=None, env=None, conne
                     (e["id"].lower() != env.lower() and e["name"] != env)]
         if len(env_list) > 0:
             raise ValidationError(
-                'The provided custom location is used by environment . If you want to use it, please specify --environment with . Otherwise, please use another custom location.'
+                'The provided custom location already used by other environment. If you want to use this custom location, please specify associated environment with --environment. \n Otherwise, please use another custom location.'
             )
 
     # check extension type
