@@ -1041,7 +1041,7 @@ def create_connected_environment(cmd,
     location = location or "northcentralusstage"
     register_provider_if_needed(cmd, CONTAINER_APPS_RP)
     _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "connectedEnvironments")
-    custom_loc_location = _validate_custom_loc_and_location(cmd, custom_location=custom_location)
+    custom_loc_location = _validate_custom_loc_and_location(cmd, custom_location)
 
     connected_env_def = ConnectedEnvironmentModel
     connected_env_def["location"] = location
@@ -2550,7 +2550,7 @@ def containerapp_up(cmd,
     up_output(app)
 
 
-def containerapp_up_logic(cmd, resource_group_name, name, env, is_connected_environment_type, image, env_vars, ingress, target_port, registry_server, registry_user, registry_pass):
+def containerapp_up_logic(cmd, resource_group_name, name, env, image, env_vars, ingress, target_port, registry_server, registry_user, registry_pass, is_connected_environment_type,):
     containerapp_def = None
     try:
         containerapp_def = ContainerAppClient.show(cmd=cmd, resource_group_name=resource_group_name, name=name)

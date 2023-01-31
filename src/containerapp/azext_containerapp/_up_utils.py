@@ -170,7 +170,7 @@ class CustomLocation(Resource):
                     )
         else:
             cluster_dict = parse_resource_id(connected_cluster_id)
-            if "resource_group" in cluster_dict and self.resource_group.name is None:
+            if "resource_group" in cluster_dict:
                 rg = cluster_dict["resource_group"]
                 self.resource_group = ResourceGroup(
                     cmd,
@@ -403,13 +403,13 @@ class ContainerApp(Resource):  # pylint: disable=too-many-instance-attributes
             resource_group_name=self.resource_group.name,
             image=self.image,
             env=self.env.get_rid(),
-            is_connected_environment_type=self.env.is_connected_environment_type(),
             target_port=self.target_port,
             registry_server=None if no_registry else self.registry_server,
             registry_pass=None if no_registry else self.registry_pass,
             registry_user=None if no_registry else self.registry_user,
             env_vars=self.env_vars,
             ingress=self.ingress,
+            is_connected_environment_type=self.env.is_connected_environment_type(),
         )
 
     def create_acr_if_needed(self):
@@ -726,8 +726,8 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
                     env.custom_location.namespace = extension.configuration_settings["appsNamespace"]
                 if len(custom_location_list) == 1:
                     try:
-                        _validate_custom_loc_and_location(cmd, env=env.name,
-                                                          custom_location=custom_location_list[0]["id"])
+                        _validate_custom_loc_and_location(cmd, custom_location=custom_location_list[0]["id"],
+                                                          env=env.name)
                         env.custom_location.name = custom_location_list[0]["id"]
                         env.custom_location.namespace = custom_location_list[0]["namespace"]
                         env.custom_location.location = custom_location_list[0]["location"]

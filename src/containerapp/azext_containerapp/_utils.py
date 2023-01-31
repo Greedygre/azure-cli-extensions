@@ -1463,7 +1463,7 @@ def validate_connected_k8s_and_custom_location(cmd, location=None, env=None, cus
         _validate_connected_k8s(cmd, connected_cluster_id)
 
 
-def _validate_custom_loc_and_location(cmd, env=None, custom_location=None, connected_cluster_id=None, env_rg=None):
+def _validate_custom_loc_and_location(cmd, custom_location=None, env=None, connected_cluster_id=None, env_rg=None):
     from ._up_utils import list_connected_environments
 
     if not is_valid_resource_id(custom_location):
@@ -1488,16 +1488,10 @@ def _validate_custom_loc_and_location(cmd, env=None, custom_location=None, conne
                     (e["id"].lower() != env.lower() and e["name"] != env)]
         if len(env_list) > 0:
             raise ValidationError(
-                'There is existed environment {} with custom domain {} on the subscription. \n Please specify which resource group your Connected environment is in.'.format(
-                    env_list[0]["id"], custom_location)
+                'The provided custom location is used by environment . If you want to use it, please specify --environment with . Otherwise, please use another custom location.'
             )
 
     # check extension type
-    if len(r.cluster_extension_ids) == 0:
-        raise ValidationError(
-            'Custom location {} cluster-extension-ids not contain the Microsoft.App.Environment extension.'.format(
-                custom_location)
-        )
     check_extension_type = False
     for extension_id in r.cluster_extension_ids:
         extension = get_cluster_extension(cmd, extension_id)
@@ -1506,7 +1500,7 @@ def _validate_custom_loc_and_location(cmd, env=None, custom_location=None, conne
             break
     if not check_extension_type:
         raise ValidationError(
-            'Custom location {} cluster-extension-ids not contain the Microsoft.App.Environment extension.'.format(
+            'There is no Microsoft.App.Environment extension found associated with custom location {}'.format(
                 custom_location)
         )
 
@@ -1627,8 +1621,10 @@ def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns'
     cluster_type = parsed_extension.get("type")
     cluster_name = parsed_extension.get("name")
     ext_name = get_randomized_name_with_dash(prefix='containerapps', initial='ext')
+
     e = models.Extension()
-    e.extension_type = 'Microsoft.App.Environment'
+    e.extension_type = 'microsoft.app.environment'
+    e.release_train = 'stable'
     e.auto_upgrade_minor_version = True
 
     e.scope = models.Scope(cluster=models.ScopeCluster(release_namespace=namespace))
