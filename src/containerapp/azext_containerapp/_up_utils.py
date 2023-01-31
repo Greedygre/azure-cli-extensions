@@ -1095,15 +1095,10 @@ def check_env_name_on_rg(cmd, env, resource_group_name, location, custom_locatio
     if env and resource_group_name:
         env_def = None
         try:
-            if resource_type:
-                if MANAGED_ENVIRONMENT_TYPE.lower() == resource_type.lower():
-                    env_def = ManagedEnvironmentClient.show(cmd, resource_group_name, env_name)
-                if CONNECTED_ENVIRONMENT_TYPE.lower() == resource_type.lower():
-                    env_def = ConnectedEnvironmentClient.show(cmd, resource_group_name, env_name)
+            if resource_type and CONNECTED_ENVIRONMENT_TYPE.lower() == resource_type.lower():
+                env_def = ConnectedEnvironmentClient.show(cmd, resource_group_name, env_name)
             else:
                 env_def = ManagedEnvironmentClient.show(cmd, resource_group_name, env_name)
-                if env_def is None:
-                    env_def = ConnectedEnvironmentClient.show(cmd, resource_group_name, env_name)
         except:  # pylint: disable=bare-except
             pass
         if env_def:
