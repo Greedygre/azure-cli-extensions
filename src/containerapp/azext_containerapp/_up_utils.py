@@ -1091,17 +1091,11 @@ def check_env_name_on_rg(cmd, env, resource_group_name, location, custom_locatio
         if custom_location or connected_cluster_id:
             resource_type = CONNECTED_ENVIRONMENT_TYPE
 
-    # If the environment resource-id is not an existing resource, only support managed, follow the current behavior. Failed if the resource is connected.
-    if is_valid_rid and resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower() and custom_location is None and connected_cluster_id is None:
-        env_def = ConnectedEnvironmentClient.show(cmd, env_dict.get("resource_group"), env_name)
-        if env_def is None:
-            raise ValidationError(
-                "Connected Environment {} does not exist on the subscription.".format(env))
+    env_def = None
 
     if location:
         _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "managedEnvironments")
     if env and resource_group_name:
-        env_def = None
         try:
             if resource_type:
                 if MANAGED_ENVIRONMENT_TYPE.lower() == resource_type.lower():
@@ -1132,6 +1126,11 @@ def check_env_name_on_rg(cmd, env, resource_group_name, location, custom_locatio
                             "Environment {} already exists in resource group {} on connected cluster {}, cannot change connected cluster of existing environment to {}.".format(
                                 env_name, custom_location_from_env.host_resource_id, env_def["location"],
                                 connected_cluster_id))
+
+    # If the environment resource-id is not an existing resource, only support managed, follow the current behavior. Failed if the resource is connected.
+    if env_def is None and is_valid_rid and resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
+        raise ValidationError(
+            "Connected Environment {} does not exist on the subscription.".format(env))
 
 
 def format_location(location=None):
