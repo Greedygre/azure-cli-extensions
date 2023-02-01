@@ -246,9 +246,8 @@ class ContainerAppEnvironment(Resource):
         logs_customer_id=None,
         resource_type=None,
     ):
-
-        super().__init__(cmd, name, resource_group, exists)
         self.resource_type = resource_type
+        super().__init__(cmd, name, resource_group, exists)
         if is_valid_resource_id(name):
             env_dict = parse_resource_id(name)
             self.name = env_dict["name"]
