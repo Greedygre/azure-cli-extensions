@@ -1609,7 +1609,7 @@ def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns'
     cluster_rp = parsed_extension.get("namespace")
     cluster_type = parsed_extension.get("type")
     cluster_name = parsed_extension.get("name")
-    ext_name = get_randomized_name_with_dash(prefix='containerapps', initial='ext')
+    ext_name = 'containerapps-ext'
 
     e = models.Extension()
     e.extension_type = 'microsoft.app.environment'
