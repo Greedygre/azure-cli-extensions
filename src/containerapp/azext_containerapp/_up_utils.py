@@ -714,20 +714,12 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
                                                             connected_cluster_id=env.custom_location.connected_cluster_id)
                 if len(custom_location_list) == 0:
                     env.custom_location.namespace = extension.scope.cluster.release_namespace
-                if len(custom_location_list) == 1:
-                    _validate_custom_loc_and_location(cmd, custom_location=custom_location_list[0]["id"],
-                                                      env=env.name)
-                    env.custom_location.name = custom_location_list[0]["id"]
-                    env.custom_location.namespace = custom_location_list[0]["namespace"]
-                    env.custom_location.location = custom_location_list[0]["location"]
-                if len(custom_location_list) > 1:
-                    custom_location_with_extension_existed = False
-                    for c in custom_location_list:
-                        if extension.id in c.cluster_extension_ids and extension.scope.cluster.release_namespace == c.namespace:
-                            custom_location_with_extension_existed = True
-                            break
-                    if not custom_location_with_extension_existed:
-                        env.custom_location.namespace = extension.namespace
+                for c in custom_location_list:
+                    if extension.id in c.cluster_extension_ids and extension.scope.cluster.release_namespace == c.namespace:
+                        env.custom_location.namespace = c["namespace"]
+                        env.custom_location.name = c["id"]
+                        env.custom_location.location = c["location"]
+                        break
 
 
 def _get_acr_from_image(cmd, app):
