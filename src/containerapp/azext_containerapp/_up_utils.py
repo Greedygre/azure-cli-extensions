@@ -722,7 +722,7 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
                 custom_location_list = list_custom_location(cmd,
                                                             connected_cluster_id=env.custom_location.connected_cluster_id)
                 if len(custom_location_list) == 0:
-                    env.custom_location.namespace = extension.configuration_settings["appsNamespace"]
+                    env.custom_location.namespace = extension.scope.cluster.release_namespace
                 if len(custom_location_list) == 1:
                     try:
                         _validate_custom_loc_and_location(cmd, custom_location=custom_location_list[0]["id"],
@@ -735,7 +735,7 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
                 if len(custom_location_list) > 1:
                     custom_location_with_extension_existed = False
                     for c in custom_location_list:
-                        if extension.id in c.cluster_extension_ids and extension.configuration_settings["appsNamespace"] == c.namespace:
+                        if extension.id in c.cluster_extension_ids and extension.scope.cluster.release_namespace == c.namespace:
                             custom_location_with_extension_existed = True
                             break
                     if not custom_location_with_extension_existed:
