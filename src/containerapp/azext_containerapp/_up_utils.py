@@ -207,7 +207,7 @@ class CustomLocation(Resource):
                 self.cluster_extension_id = extension.id
                 self.namespace = extension.namespace
             if self.namespace is None:
-                self.namespace = get_randomized_name_with_dash(prefix="containerapp", initial="ns")
+                self.namespace = "containerapp-ns"
             logger.warning(
                 f"Creating {type(self).__name__} '{self.name}' in resource group {self.resource_group.name}"
             )
@@ -724,14 +724,11 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
                 if len(custom_location_list) == 0:
                     env.custom_location.namespace = extension.scope.cluster.release_namespace
                 if len(custom_location_list) == 1:
-                    try:
-                        _validate_custom_loc_and_location(cmd, custom_location=custom_location_list[0]["id"],
-                                                          env=env.name)
-                        env.custom_location.name = custom_location_list[0]["id"]
-                        env.custom_location.namespace = custom_location_list[0]["namespace"]
-                        env.custom_location.location = custom_location_list[0]["location"]
-                    except:
-                        pass
+                    _validate_custom_loc_and_location(cmd, custom_location=custom_location_list[0]["id"],
+                                                      env=env.name)
+                    env.custom_location.name = custom_location_list[0]["id"]
+                    env.custom_location.namespace = custom_location_list[0]["namespace"]
+                    env.custom_location.location = custom_location_list[0]["location"]
                 if len(custom_location_list) > 1:
                     custom_location_with_extension_existed = False
                     for c in custom_location_list:
