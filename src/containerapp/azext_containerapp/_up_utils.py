@@ -626,10 +626,10 @@ def _get_app_env_and_group(
         matched_apps = [c for c in list_containerapp(cmd) if c["name"].lower() == name.lower()]
         if env.name:
             matched_apps = [c for c in matched_apps if parse_resource_id(c["properties"]["environmentId"])["name"].lower() == env.name.lower()]
-        if env.resource_type:
-            matched_apps = [c for c in matched_apps if parse_resource_id(c["properties"]["environmentId"])["resource_type"].lower() == env.resource_type.lower()]
         if env.custom_location.name:
             matched_apps = [c for c in matched_apps if c["extendedLocation"]["name"].lower() == env.custom_location.name.lower()]
+        elif env.resource_type:
+            matched_apps = [c for c in matched_apps if parse_resource_id(c["properties"]["environmentId"])["resource_type"].lower() == env.resource_type.lower()]
         if location:
             matched_apps = [c for c in matched_apps if format_location(c["location"]) == format_location(location)]
         if len(matched_apps) == 1:
@@ -691,7 +691,7 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
     #  if connected cluster have one custom location (with ext namespace) bind to the container app ext, then use it.
     if env.custom_location.name is None and env.custom_location.connected_cluster_id is None:
         raise ValidationError(
-            "Please specify which connected-cluster-id or custom location you want to create the Connected environment.")
+            "please specify one of connected-cluster-id or custom location you want to create the Connected environment.")
 
     if env.custom_location.connected_cluster_id and env.custom_location.name is None:
         connected_cluster = get_connected_k8s(cmd, env.custom_location.connected_cluster_id)
@@ -710,8 +710,7 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
             env.custom_location.cluster_extension_id = extension.id
             custom_location_list = list_custom_location(cmd,
                                                         connected_cluster_id=env.custom_location.connected_cluster_id)
-            if len(custom_location_list) == 0:
-                env.custom_location.namespace = extension.scope.cluster.release_namespace
+            env.custom_location.namespace = extension.scope.cluster.release_namespace
             for c in custom_location_list:
                 if extension.id in c.cluster_extension_ids and extension.scope.cluster.release_namespace == c.namespace:
                     env.custom_location.namespace = c.namespace
