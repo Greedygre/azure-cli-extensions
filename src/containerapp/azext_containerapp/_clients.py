@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 STABLE_API_VERSION = "2022-03-01"
 PREVIEW_API_VERSION = "2022-06-01-preview"
-POLLING_TIMEOUT = 60  # how many seconds before exiting
+POLLING_TIMEOUT = 600  # how many seconds before exiting
 POLLING_SECONDS = 2  # how many seconds between requests
 
 
