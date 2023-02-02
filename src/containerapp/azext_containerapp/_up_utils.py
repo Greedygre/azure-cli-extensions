@@ -693,7 +693,7 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
         raise ValidationError(
             "Please specify which connected-cluster-id or custom location you want to create the Connected environment.")
 
-    if env.custom_location.connected_cluster_id:
+    if env.custom_location.connected_cluster_id and env.custom_location.name is None:
         connected_cluster = get_connected_k8s(cmd, env.custom_location.connected_cluster_id)
         env.custom_location.location = connected_cluster.location
         if env.custom_location.resource_group is None or env.custom_location.resource_group.name is None:
@@ -708,18 +708,16 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
 
         if extension:
             env.custom_location.cluster_extension_id = extension.id
-
-            if env.custom_location.name is None:
-                custom_location_list = list_custom_location(cmd,
-                                                            connected_cluster_id=env.custom_location.connected_cluster_id)
-                if len(custom_location_list) == 0:
-                    env.custom_location.namespace = extension.scope.cluster.release_namespace
-                for c in custom_location_list:
-                    if extension.id in c.cluster_extension_ids and extension.scope.cluster.release_namespace == c.namespace:
-                        env.custom_location.namespace = c["namespace"]
-                        env.custom_location.name = c["id"]
-                        env.custom_location.location = c["location"]
-                        break
+            custom_location_list = list_custom_location(cmd,
+                                                        connected_cluster_id=env.custom_location.connected_cluster_id)
+            if len(custom_location_list) == 0:
+                env.custom_location.namespace = extension.scope.cluster.release_namespace
+            for c in custom_location_list:
+                if extension.id in c.cluster_extension_ids and extension.scope.cluster.release_namespace == c.namespace:
+                    env.custom_location.namespace = c.namespace
+                    env.custom_location.name = c.id
+                    env.custom_location.location = c.location
+                    break
 
 
 def _get_acr_from_image(cmd, app):
@@ -880,7 +878,7 @@ def _set_up_defaults(
                 "Please specify which resource group your Containerapp environment is in."
             )    # get ACR details from --image, if possible
     # try to set env and RG
-    if env.is_connected_environment_type() and (not env.name or not resource_group.name):
+    if env.is_connected_environment_type() and (not env.name or not resource_group.name or not env.custom_location.name):
         connected_env_list = list_connected_environments(cmd=cmd, resource_group_name=resource_group_name)
         for e in connected_env_list:
             if env.name and env.name != e["name"]:
