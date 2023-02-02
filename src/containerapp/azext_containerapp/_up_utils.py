@@ -168,15 +168,6 @@ class CustomLocation(Resource):
                         rg,
                         location,
                     )
-        else:
-            cluster_dict = parse_resource_id(connected_cluster_id)
-            if "resource_group" in cluster_dict:
-                rg = cluster_dict["resource_group"]
-                self.resource_group = ResourceGroup(
-                    cmd,
-                    rg,
-                    location,
-                )
 
         self.location = location
         self.namespace = namespace
