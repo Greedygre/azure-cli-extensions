@@ -1543,15 +1543,10 @@ def create_custom_location(cmd, custom_location_name=None, resource_group=None, 
                            namespace='containerapp-ns', cluster_extension_id=None, location=None):
     from azure.mgmt.extendedlocation import models
 
-    parsed_cluster = parse_resource_id(connected_cluster_id)
-    subscription_id = parsed_cluster.get("subscription")
-    cluster_loc_rg = parsed_cluster["resource_group"]
-    if resource_group is None:
-        resource_group = cluster_loc_rg
     c = models.CustomLocation(name=custom_location_name, location=location,
                               cluster_extension_ids=[cluster_extension_id], host_resource_id=connected_cluster_id,
                               namespace=namespace, host_type=models.HostType.KUBERNETES)
-    poller = customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).begin_create_or_update(
+    poller = customlocation_client_factory(cmd.cli_ctx).begin_create_or_update(
         resource_group_name=resource_group, resource_name=custom_location_name, parameters=c)
     custom_location = LongRunningOperation(cmd.cli_ctx)(poller)
     return custom_location
