@@ -71,7 +71,7 @@ from ._utils import (_validate_subscription_registered, _get_location_from_resou
                      validate_hostname, patch_new_custom_domain, get_custom_domains, _validate_revision_name,
                      set_managed_identity,
                      clean_null_values, _populate_secret_values, connected_env_check_cert_name_availability,
-                     _validate_custom_loc_and_location, _validate_connected_k8s)
+                     _validate_custom_loc_and_location)
 
 
 from ._ssh_utils import (SSH_DEFAULT_ENCODING, WebSocketConnection, read_ssh, get_stdin_writer, SSH_CTRL_C_MSG,
@@ -80,8 +80,7 @@ from ._constants import (MAXIMUM_SECRET_LENGTH, MICROSOFT_SECRET_SETTING_NAME, F
                          GITHUB_SECRET_SETTING_NAME,
                          GOOGLE_SECRET_SETTING_NAME, TWITTER_SECRET_SETTING_NAME, APPLE_SECRET_SETTING_NAME,
                          CONTAINER_APPS_RP,
-                         NAME_INVALID, NAME_ALREADY_EXISTS, ACR_IMAGE_SUFFIX,
-                         CUSTOM_LOCATION_RP, KUBERNETES_CONFIGURATION_RP)
+                         NAME_INVALID, NAME_ALREADY_EXISTS, ACR_IMAGE_SUFFIX)
 
 logger = get_logger(__name__)
 
@@ -2493,17 +2492,8 @@ def containerapp_up(cmd,
     _validate_containerapp_name(name)
 
     register_provider_if_needed(cmd, CONTAINER_APPS_RP)
-    _validate_up_args(cmd, source, image, repo, registry_server)
+    _validate_up_args(cmd, source, image, repo, registry_server, env, resource_group_name, location, custom_location, connected_cluster_id)
     validate_container_app_name(name)
-    if custom_location or connected_cluster_id:
-        register_provider_if_needed(cmd, CUSTOM_LOCATION_RP)
-        register_provider_if_needed(cmd, KUBERNETES_CONFIGURATION_RP)
-        if location:
-            _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "connectedEnvironments")
-        if custom_location:
-            _validate_custom_loc_and_location(cmd, env, custom_location, connected_cluster_id, resource_group_name)
-        if connected_cluster_id:
-            _validate_connected_k8s(cmd, connected_cluster_id)
 
     check_env_name_on_rg(cmd, env, resource_group_name, location, custom_location, connected_cluster_id)
 

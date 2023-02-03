@@ -47,11 +47,12 @@ from ._utils import (
     get_custom_location,
     create_custom_location,
     create_extension, list_custom_location, _validate_custom_loc_and_location, get_randomized_name_with_dash,
-    list_cluster_extensions, get_connected_k8s,
+    list_cluster_extensions, get_connected_k8s, _validate_connected_k8s,
 )
 
 from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, \
-    MAXIMUM_CONTAINER_APP_NAME_LENGTH, MANAGED_ENVIRONMENT_TYPE, CONNECTED_ENVIRONMENT_TYPE, CUSTOM_LOCATION_RP
+    MAXIMUM_CONTAINER_APP_NAME_LENGTH, MANAGED_ENVIRONMENT_TYPE, CONNECTED_ENVIRONMENT_TYPE, CUSTOM_LOCATION_RP, \
+    KUBERNETES_CONFIGURATION_RP
 
 from .custom import (
     create_connected_environment,
@@ -564,7 +565,7 @@ def _get_ingress_and_target_port(ingress, target_port, dockerfile_content: "list
     return ingress, target_port
 
 
-def _validate_up_args(cmd, source, image, repo, registry_server):
+def _validate_up_args(cmd, source, image, repo, registry_server, env, resource_group_name, location, custom_location, connected_cluster_id):
     disallowed_params = ["--only-show-errors", "--output", "-o"]
     command_args = cmd.cli_ctx.data.get("safe_params", [])
     for a in disallowed_params:
@@ -586,7 +587,15 @@ def _validate_up_args(cmd, source, image, repo, registry_server):
         if registry_name and len(registry_name) > MAXIMUM_SECRET_LENGTH:
             raise ValidationError(f"--registry-server ACR name must be less than {MAXIMUM_SECRET_LENGTH} "
                                   "characters when using --repo")
-
+    if custom_location or connected_cluster_id:
+        register_provider_if_needed(cmd, CUSTOM_LOCATION_RP)
+        register_provider_if_needed(cmd, KUBERNETES_CONFIGURATION_RP)
+        if location:
+            _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "connectedEnvironments")
+        if custom_location:
+            _validate_custom_loc_and_location(cmd, env, custom_location, connected_cluster_id, resource_group_name)
+        if connected_cluster_id:
+            _validate_connected_k8s(cmd, connected_cluster_id)
 
 def _reformat_image(source, repo, image):
     if source and (image or repo):
