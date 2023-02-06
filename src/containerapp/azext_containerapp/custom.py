@@ -2479,10 +2479,10 @@ def containerapp_up(cmd,
                     service_principal_client_id=None,
                     service_principal_client_secret=None,
                     service_principal_tenant_id=None,
-                    custom_location=None,
+                    custom_location_id=None,
                     connected_cluster_id=None):
     from ._up_utils import (_validate_up_args, _reformat_image, _get_dockerfile_content, _get_ingress_and_target_port,
-                            ResourceGroup, ContainerAppEnvironment, ContainerApp, CustomLocation, _get_registry_from_app,
+                            ResourceGroup, ContainerAppEnvironment, ContainerApp, CustomLocation, Extension, _get_registry_from_app,
                             _get_registry_details, _create_github_action, _set_up_defaults, up_output,
                             check_env_name_on_rg, get_token, _validate_containerapp_name, format_location)
     from ._github_oauth import cache_github_token
@@ -2492,10 +2492,10 @@ def containerapp_up(cmd,
     _validate_containerapp_name(name)
 
     register_provider_if_needed(cmd, CONTAINER_APPS_RP)
-    _validate_up_args(cmd, source, image, repo, registry_server, env, resource_group_name, location, custom_location, connected_cluster_id)
+    _validate_up_args(cmd, source, image, repo, registry_server, env, resource_group_name, location, custom_location_id, connected_cluster_id)
     validate_container_app_name(name)
 
-    check_env_name_on_rg(cmd, env, resource_group_name, location, custom_location, connected_cluster_id)
+    check_env_name_on_rg(cmd, env, resource_group_name, location, custom_location_id, connected_cluster_id)
 
     image = _reformat_image(source, repo, image)
     token = get_token(cmd, repo, token)
@@ -2513,19 +2513,20 @@ def containerapp_up(cmd,
     ingress, target_port = _get_ingress_and_target_port(ingress, target_port, dockerfile_content)
 
     resource_group = ResourceGroup(cmd, name=resource_group_name, location=location)
-    custom_location_resource = CustomLocation(cmd, name=custom_location, resource_group=resource_group, connected_cluster_id=connected_cluster_id)
-    env = ContainerAppEnvironment(cmd, env, resource_group, location=location, logs_key=logs_key, logs_customer_id=logs_customer_id, custom_location=custom_location_resource)
+    custom_location = CustomLocation(cmd, name=custom_location_id, resource_group_name=resource_group_name, connected_cluster_id=connected_cluster_id)
+    extension = Extension(cmd, logs_rg=resource_group_name, logs_location=location, logs_share_key=logs_key, logs_customer_id=logs_customer_id, connected_cluster_id=connected_cluster_id, connected_environment_name=env)
+    env = ContainerAppEnvironment(cmd, env, resource_group, location=location, logs_key=logs_key, logs_customer_id=logs_customer_id, custom_location_id=custom_location_id, connected_cluster_id=connected_cluster_id)
     app = ContainerApp(cmd, name, resource_group, None, image, env, target_port, registry_server, registry_user, registry_pass, env_vars, ingress)
 
-    _set_up_defaults(cmd, name, resource_group_name, logs_customer_id, location, custom_location, connected_cluster_id, resource_group, env, app)
+    _set_up_defaults(cmd, name, resource_group_name, logs_customer_id, location, resource_group, env, app, custom_location, extension)
 
     if app.check_exists():
         if app.get()["properties"]["provisioningState"] == "InProgress":
             raise ValidationError("Containerapp has an existing provisioning in progress. Please wait until provisioning has completed and rerun the command.")
 
     resource_group.create_if_needed()
-    if env.is_connected_environment_type():
-        custom_location_resource.create_if_needed(env_name=env.name, logs_customer_id=logs_customer_id, logs_share_key=logs_key, logs_rg=resource_group.name)
+    extension.create_if_needed()
+    custom_location.create_if_needed()
     env.create_if_needed(name)
 
     if source or repo:

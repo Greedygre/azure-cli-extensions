@@ -26,9 +26,7 @@ from ._clients import ContainerAppClient, ManagedEnvironmentClient, ConnectedEnv
 from ._client_factory import handle_raw_exception, providers_client_factory, cf_resource_groups, \
     log_analytics_client_factory, log_analytics_shared_key_client_factory, customlocation_client_factory, \
     connected_k8s_client_factory
-from ._constants import (MAXIMUM_CONTAINER_APP_NAME_LENGTH, SHORT_POLLING_INTERVAL_SECS, LONG_POLLING_INTERVAL_SECS,
-                         LOG_ANALYTICS_RP, CONTAINER_APPS_RP, CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, ACR_IMAGE_SUFFIX,
-                         CONNECTED_ENV_CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, CONNECTED_CLUSTER_TYPE, CUSTOM_LOCATION_RP, KUBERNETES_RP, KUBERNETES_CONFIGURATION_RP)
+from ._constants import (MAXIMUM_CONTAINER_APP_NAME_LENGTH, SHORT_POLLING_INTERVAL_SECS, LONG_POLLING_INTERVAL_SECS, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, ACR_IMAGE_SUFFIX, CONNECTED_ENV_CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, CONNECTED_CLUSTER_TYPE)
 from ._models import (ContainerAppCustomDomainEnvelope as ContainerAppCustomDomainEnvelopeModel)
 from ._client_factory import k8s_extension_client_factory
 
@@ -1039,16 +1037,18 @@ def is_platform_windows():
     return platform.system() == "Windows"
 
 
-def get_randomized_name(prefix, name=None, initial="rg"):
+def get_randomized_name(prefix, name=None, initial="rg", random_int=None):
     from random import randint
-    default = "{}_{}_{:04}".format(prefix, initial, randint(0, 9999))
+    random_int = random_int if random_int else randint(0, 9999)
+    default = "{}_{}_{:04}".format(prefix, initial, random_int)
     if name is not None:
         return name
     return default
 
-def get_randomized_name_with_dash(prefix, name=None, initial="rg"):
+def get_randomized_name_with_dash(prefix, name=None, initial="rg", random_int=None):
     from random import randint
-    default = "{}-{}-{:04}".format(prefix, initial, randint(0, 9999))
+    random_int = random_int if random_int else randint(0, 9999)
+    default = "{}-{}-{:04}".format(prefix, initial, random_int)
     if name is not None:
         return name
     return default
@@ -1627,9 +1627,7 @@ def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns'
         "logProcessor.appLogs.logAnalyticsConfig.customerId": b64_customer_id,
         "logProcessor.appLogs.logAnalyticsConfig.sharedKey": b64_share_key
     }
-    logger.warning(
-        f"Creating Extension {ext_name} for cluster {connected_cluster_id}"
-    )
+
     poller = k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription).begin_create(
         resource_group_name=cluster_rg,
         cluster_rp=cluster_rp,

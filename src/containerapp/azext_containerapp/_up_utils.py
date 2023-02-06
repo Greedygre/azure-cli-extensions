@@ -3,8 +3,7 @@
 # Licensed under the MIT License. See License.txt in the project root for license information.
 # --------------------------------------------------------------------------------------------
 # pylint: disable=line-too-long, consider-using-f-string, no-else-return, duplicate-string-formatting-argument, expression-not-assigned, too-many-locals, logging-fstring-interpolation, arguments-differ, abstract-method, logging-format-interpolation, broad-except
-
-
+from random import randint
 from urllib.parse import urlparse
 import requests
 
@@ -46,22 +45,25 @@ from ._utils import (
     register_provider_if_needed,
     get_custom_location,
     create_custom_location,
-    create_extension, list_custom_location, _validate_custom_loc_and_location, get_randomized_name_with_dash,
-    list_cluster_extensions, get_connected_k8s, _validate_connected_k8s,
+    create_extension,
+    list_custom_location,
+    _validate_custom_loc_and_location,
+    get_randomized_name_with_dash,
+    list_cluster_extensions,
+    get_connected_k8s,
+    _validate_connected_k8s,
 )
 
-from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, \
-    MAXIMUM_CONTAINER_APP_NAME_LENGTH, MANAGED_ENVIRONMENT_TYPE, CONNECTED_ENVIRONMENT_TYPE, CUSTOM_LOCATION_RP, \
-    KUBERNETES_CONFIGURATION_RP
+from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, MAXIMUM_CONTAINER_APP_NAME_LENGTH, MANAGED_ENVIRONMENT_TYPE, CONNECTED_ENVIRONMENT_TYPE, CUSTOM_LOCATION_RP, KUBERNETES_CONFIGURATION_RP
 
 from .custom import (
-    create_connected_environment,
     create_managed_environment,
     containerapp_up_logic,
     list_containerapp,
     list_connected_environments,
     list_managed_environments,
     create_or_update_github_action,
+    create_connected_environment,
 )
 
 from ._github_oauth import load_github_token_from_cache, get_github_access_token
@@ -146,34 +148,90 @@ class Resource:
         return self.exists
 
 
-class CustomLocation(Resource):
+class Extension:
+    def __init__(
+            self,
+            cmd,
+            name=None,
+            exists: bool = None,
+            namespace=None,
+            logs_location=None,
+            logs_rg=None,
+            logs_customer_id=None,
+            logs_share_key=None,
+            connected_cluster_id=None,
+            connected_environment_name=None,
+    ):
+        self.cmd = cmd
+        self.name = name
+        self.exists = exists
+        self.namespace = namespace
+        self.logs_location = logs_location
+        self.logs_rg = logs_rg
+        self.logs_customer_id = logs_customer_id
+        self.logs_share_key = logs_share_key
+        self.connected_cluster_id = connected_cluster_id
+        self.connected_environment_name = connected_environment_name
+
+    def create(self):
+        extension = create_extension(cmd=self.cmd,
+                                     connected_cluster_id=self.connected_cluster_id,
+                                     connected_environment_name=self.connected_environment_name,
+                                     logs_customer_id=self.logs_customer_id,
+                                     logs_share_key=self.logs_share_key,
+                                     location=self.logs_location,
+                                     logs_rg=self.logs_rg)
+        self.exists = True
+        self.name = extension.name
+        self.cluster_extension_id = extension.id
+
+    def create_if_needed(self):
+        if self.name is None:
+            return
+        if not self.exists:
+            logger.warning(
+                f"Creating {type(self).__name__} '{self.name}' in cluster {self.connected_cluster_id}"
+            )
+            self.create()
+        else:
+            logger.warning(
+                f"Using {type(self).__name__} '{self.name}' in cluster {self.connected_cluster_id}"
+            )  # TODO use .info()
+
+    def get_rid(self):
+        rid = self.name
+        if not is_valid_resource_id(self.name):
+            rid = "{}/providers/Microsoft.KubernetesConfiguration/extensions/{}".format(self.connected_cluster_id, self.name)
+        return rid
+
+
+class CustomLocation:
     def __init__(
         self,
         cmd,
         name: str,
-        resource_group: "ResourceGroup",
+        resource_group_name=None,
         exists: bool = None,
         location=None,
         namespace=None,
         cluster_extension_id=None,
         connected_cluster_id=None,
     ):
-        super().__init__(cmd, name, resource_group, exists)
-        if is_valid_resource_id(name):
-            custom_location_dict = parse_resource_id(name)
-            if "resource_group" in custom_location_dict:
-                rg = custom_location_dict["resource_group"]
-                if self.resource_group.name != rg:
-                    self.resource_group = ResourceGroup(
-                        cmd,
-                        rg,
-                        location,
-                    )
-
+        self.cmd = cmd
+        self.name = name
+        self.resource_group_name = resource_group_name
+        self.exists = exists
         self.location = location
         self.namespace = namespace
         self.cluster_extension_id = cluster_extension_id
         self.connected_cluster_id = connected_cluster_id
+
+        if is_valid_resource_id(name):
+            custom_location_dict = parse_resource_id(name)
+            self.name = custom_location_dict["name"]
+            self.exists = True
+            if "resource_group" in custom_location_dict:
+                self.resource_group_name = custom_location_dict["resource_group"]
 
     def create(self):
         register_provider_if_needed(self.cmd, CUSTOM_LOCATION_RP)
@@ -188,36 +246,34 @@ class CustomLocation(Resource):
         self.exists = True
         return custom_location
 
-    def create_if_needed(self, env_name, logs_customer_id, logs_share_key, logs_rg):
-        if not self.check_exists():
-            if self.name is None:
-                self.name = get_randomized_name_with_dash(prefix=get_profile_username(), initial="env-location")
-            if self.cluster_extension_id is None:
-                extension = create_extension(cmd=self.cmd, connected_cluster_id=self.connected_cluster_id, connected_environment_name=env_name,
-                                             logs_customer_id=logs_customer_id, logs_share_key=logs_share_key,
-                                             location=self.location, logs_rg=logs_rg)
-                self.cluster_extension_id = extension.id
-                self.namespace = extension.namespace
-            if self.namespace is None:
-                self.namespace = "containerapp-ns"
+    def create_if_needed(self):
+        if self.name is None:
+            return
+        if not self.exists:
             logger.warning(
-                f"Creating {type(self).__name__} '{self.name}' in resource group {self.resource_group.name}"
+                f"Creating {type(self).__name__} '{self.name}' in resource group {self.resource_group_name}"
             )
             self.create()
         else:
             logger.warning(
-                f"Using {type(self).__name__} '{self.name}' in resource group {self.resource_group.name}"
+                f"Using {type(self).__name__} '{self.name}' in resource group {self.resource_group_name}"
             )  # TODO use .info()
 
-    def _get(self):
-        return get_custom_location(self.cmd, custom_location=self.name)
+    def set_name(self, name_or_rid):
+        if is_valid_resource_id(name_or_rid):
+            custom_location_dict = parse_resource_id(name_or_rid)
+            self.name = custom_location_dict["name"]
+            if "resource_group" in custom_location_dict:
+                self.resource_group_name = custom_location_dict["resource_group"]
+        else:
+            self.name = name_or_rid
 
     def get_rid(self):
         rid = self.name
         if not is_valid_resource_id(self.name):
             rid = resource_id(
                 subscription=get_subscription_id(self.cmd.cli_ctx),
-                resource_group=self.resource_group.name,
+                resource_group=self.resource_group_name,
                 namespace=CUSTOM_LOCATION_RP,
                 type="customlocations",
                 name=self.name,
@@ -231,12 +287,13 @@ class ContainerAppEnvironment(Resource):
         cmd,
         name: str,
         resource_group: "ResourceGroup",
-        custom_location: "CustomLocation",
         exists: bool = None,
         location=None,
         logs_key=None,
         logs_customer_id=None,
         resource_type=None,
+        custom_location_id=None,
+        connected_cluster_id=None,
     ):
         self.resource_type = resource_type
         super().__init__(cmd, name, resource_group, exists)
@@ -250,12 +307,12 @@ class ContainerAppEnvironment(Resource):
             if "resource_type" in env_dict:
                 self.resource_type = env_dict["resource_type"]
         if self.resource_type is None:
-            if custom_location.connected_cluster_id or custom_location.name:
+            if custom_location_id or connected_cluster_id:
                 self.resource_type = CONNECTED_ENVIRONMENT_TYPE
         self.location = location
         self.logs_key = logs_key
         self.logs_customer_id = logs_customer_id
-        self.custom_location = custom_location
+        self.custom_location_id = custom_location_id
 
     def set_name(self, name_or_rid):
         if is_valid_resource_id(name_or_rid):
@@ -308,7 +365,7 @@ class ContainerAppEnvironment(Resource):
                 self.cmd,
                 self.name,
                 location=self.location,
-                custom_location=self.custom_location.get_rid(),
+                custom_location_id=self.custom_location_id,
                 resource_group_name=self.resource_group.name,
             )
         else:
@@ -565,7 +622,7 @@ def _get_ingress_and_target_port(ingress, target_port, dockerfile_content: "list
     return ingress, target_port
 
 
-def _validate_up_args(cmd, source, image, repo, registry_server, env, resource_group_name, location, custom_location, connected_cluster_id):
+def _validate_up_args(cmd, source, image, repo, registry_server, env, resource_group_name, location, custom_location_id, connected_cluster_id):
     disallowed_params = ["--only-show-errors", "--output", "-o"]
     command_args = cmd.cli_ctx.data.get("safe_params", [])
     for a in disallowed_params:
@@ -587,13 +644,13 @@ def _validate_up_args(cmd, source, image, repo, registry_server, env, resource_g
         if registry_name and len(registry_name) > MAXIMUM_SECRET_LENGTH:
             raise ValidationError(f"--registry-server ACR name must be less than {MAXIMUM_SECRET_LENGTH} "
                                   "characters when using --repo")
-    if custom_location or connected_cluster_id:
+    if custom_location_id or connected_cluster_id:
         register_provider_if_needed(cmd, CUSTOM_LOCATION_RP)
         register_provider_if_needed(cmd, KUBERNETES_CONFIGURATION_RP)
         if location:
             _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "connectedEnvironments")
-        if custom_location:
-            _validate_custom_loc_and_location(cmd, env, custom_location, connected_cluster_id, resource_group_name)
+        if custom_location_id:
+            _validate_custom_loc_and_location(cmd, custom_location_id, env, connected_cluster_id, resource_group_name)
         if connected_cluster_id:
             _validate_connected_k8s(cmd, connected_cluster_id)
 
@@ -635,8 +692,8 @@ def _get_app_env_and_group(
         matched_apps = [c for c in list_containerapp(cmd) if c["name"].lower() == name.lower()]
         if env.name:
             matched_apps = [c for c in matched_apps if parse_resource_id(c["properties"]["environmentId"])["name"].lower() == env.name.lower()]
-        if env.custom_location.name:
-            matched_apps = [c for c in matched_apps if c["extendedLocation"]["name"].lower() == env.custom_location.name.lower()]
+        if env.custom_location_id:
+            matched_apps = [c for c in matched_apps if c["extendedLocation"]["name"].lower() == env.custom_location_id.lower()]
         elif env.resource_type:
             matched_apps = [c for c in matched_apps if parse_resource_id(c["properties"]["environmentId"])["resource_type"].lower() == env.resource_type.lower()]
         if location:
@@ -647,7 +704,7 @@ def _get_app_env_and_group(
             ]
             env.set_name(matched_apps[0]["properties"]["environmentId"])
             if env.is_connected_environment_type():
-                env.custom_location.name = matched_apps[0]["extendedLocation"]["name"]
+                env.custom_location_id = matched_apps[0]["extendedLocation"]["name"]
         elif len(matched_apps) > 1:
             raise ValidationError(
                 f"There are multiple containerapps with name {name} on the subscription. "
@@ -695,37 +752,43 @@ def _get_env_and_group_from_log_analytics(
 
 def _get_custom_location_and_extension_id_and_location_from_cluster(
         cmd,
-        env
+        env: "ContainerAppEnvironment",
+        custom_location: "CustomLocation",
+        extension: "Extension"
 ):
     #  if connected cluster have one custom location (with ext namespace) bind to the container app ext, then use it.
-    if env.custom_location.name is None and env.custom_location.connected_cluster_id is None:
+    if custom_location.name is None and custom_location.connected_cluster_id is None:
         raise ValidationError(
             "please specify one of connected-cluster-id or custom location you want to create the Connected environment.")
 
-    if env.custom_location.connected_cluster_id and env.custom_location.name is None:
-        connected_cluster = get_connected_k8s(cmd, env.custom_location.connected_cluster_id)
-        env.custom_location.location = connected_cluster.location
-        if env.custom_location.resource_group is None or env.custom_location.resource_group.name is None:
-            env.custom_location.resource_group = ResourceGroup(cmd, connected_cluster.resource_group, connected_cluster.location)
+    if custom_location.connected_cluster_id and env.custom_location_id is None:
+        connected_cluster = get_connected_k8s(cmd, custom_location.connected_cluster_id)
+        custom_location.location = connected_cluster.location
 
-        extension_list = list_cluster_extensions(cmd, connected_cluster_id=env.custom_location.connected_cluster_id)
-        extension = None
+        if custom_location.resource_group_name is None:
+            custom_location.resource_group_name = connected_cluster.resource_group
+
+        extension_list = list_cluster_extensions(cmd, connected_cluster_id=custom_location.connected_cluster_id)
         for e in extension_list:
             if e.extension_type.lower() == "Microsoft.App.Environment".lower():
-                extension = e
+                extension.exists = True
+                extension.name = e.name
+                extension.namespace = e.scope.cluster.release_namespace
+                custom_location.cluster_extension_id = e.id
+                custom_location.namespace = e.scope.cluster.release_namespace
+                custom_location_list = list_custom_location(cmd,
+                                                            connected_cluster_id=custom_location.connected_cluster_id)
+                for c in custom_location_list:
+                    if e.id in c.cluster_extension_ids and e.scope.cluster.release_namespace == c.namespace:
+                        env.custom_location_id = c.id
+                        custom_location.namespace = c.namespace
+                        custom_location.set_name(c.id)
+                        custom_location.location = c.location
+                        custom_location.exists = True
+                        break
                 break
 
-        if extension:
-            env.custom_location.cluster_extension_id = extension.id
-            custom_location_list = list_custom_location(cmd,
-                                                        connected_cluster_id=env.custom_location.connected_cluster_id)
-            env.custom_location.namespace = extension.scope.cluster.release_namespace
-            for c in custom_location_list:
-                if extension.id in c.cluster_extension_ids and extension.scope.cluster.release_namespace == c.namespace:
-                    env.custom_location.namespace = c.namespace
-                    env.custom_location.name = c.id
-                    env.custom_location.location = c.location
-                    break
+
 
 
 def _get_acr_from_image(cmd, app):
@@ -855,11 +918,11 @@ def _set_up_defaults(
     resource_group_name,
     logs_customer_id,
     location,
-    custom_location,
-    connected_cluster_id,
     resource_group: "ResourceGroup",
     env: "ContainerAppEnvironment",
     app: "ContainerApp",
+    custom_location: "CustomLocation",
+    extension: "Extension"
 ):
     # If no RG passed in and a singular app exists with the same name, get its env and rg
     _get_app_env_and_group(cmd, name, resource_group, env, location)
@@ -886,25 +949,25 @@ def _set_up_defaults(
                 "Please specify which resource group your Containerapp environment is in."
             )    # get ACR details from --image, if possible
     # try to set env and RG
-    if env.is_connected_environment_type() and (not env.name or not resource_group.name or not env.custom_location.name):
+    if env.is_connected_environment_type() and (not env.name or not resource_group.name or not env.custom_location_id):
         connected_env_list = list_connected_environments(cmd=cmd, resource_group_name=resource_group_name)
         for e in connected_env_list:
             if env.name and env.name != e["name"]:
                 continue
             if location and format_location(e["location"]) != location:
                 continue
-            if custom_location and e["extendedLocation"]["name"].lower() != custom_location.lower():
+            if custom_location.name and e["extendedLocation"]["name"].lower() != custom_location.get_rid().lower():
                 continue
-            if connected_cluster_id:
+            if custom_location.connected_cluster_id:
                 custom_location_from_env = get_custom_location(cmd=cmd, custom_location=e["extendedLocation"]["name"])
-                if connected_cluster_id.lower() != custom_location_from_env.host_resource_id.lower():
+                if custom_location.connected_cluster_id.lower() != custom_location_from_env.host_resource_id.lower():
                     continue
             env_list.append(e)
 
         if len(env_list) == 1:
             resource_group.name = parse_resource_id(env_list[0]["id"])["resource_group"]
             env.set_name(env_list[0]["id"])
-            env.custom_location.name = env_list[0]["extendedLocation"]["name"]
+            env.custom_location_id = env_list[0]["extendedLocation"]["name"]
         if len(env_list) > 1:
             if env.name:
                 raise ValidationError(
@@ -914,10 +977,22 @@ def _set_up_defaults(
             else:
                 resource_group.name = parse_resource_id(env_list[0]["id"])["resource_group"]
                 env.set_name(env_list[0]["id"])
-                env.custom_location.name = env_list[0]["extendedLocation"]["name"]
+                env.custom_location_id = env_list[0]["extendedLocation"]["name"]
 
     if env.is_connected_environment_type():
-        _get_custom_location_and_extension_id_and_location_from_cluster(cmd, env=env)
+        _get_custom_location_and_extension_id_and_location_from_cluster(cmd, env=env, custom_location=custom_location, extension=extension)
+        random_int = randint(0, 9999)
+        resource_group.name = get_randomized_name(get_profile_username(), name=resource_group.name, random_int=random_int)
+        env.name = env.name if env.name else "{}-env".format(name).replace("_", "-")
+        if env.custom_location_id is None:
+            custom_location.name = get_randomized_name_with_dash(prefix=get_profile_username(), name=custom_location.name, initial="env-location", random_int=random_int)
+            env.custom_location_id = custom_location.get_rid()
+            if extension.name is None:
+                extension.name = 'containerapps-ext'
+                extension.namespace = "containerapp-ns"
+                extension.logs_rg = resource_group.name
+                extension.connected_environment_name = env.name
+                custom_location.cluster_extension_id = extension.get_rid()
 
     _get_acr_from_image(cmd, app)
 
@@ -1067,12 +1142,12 @@ def list_environment_locations(cmd):
     return res_locations
 
 
-def check_env_name_on_rg(cmd, env, resource_group_name, location, custom_location, connected_cluster_id):
+def check_env_name_on_rg(cmd, env, resource_group_name, location, custom_location_id, connected_cluster_id):
     env_dict = parse_resource_id(env)
     env_name = env_dict.get("name")
     resource_type = env_dict.get("resource_type")
     if resource_type is None:
-        if custom_location or connected_cluster_id:
+        if custom_location_id or connected_cluster_id:
             resource_type = CONNECTED_ENVIRONMENT_TYPE
 
     if location:
@@ -1092,10 +1167,10 @@ def check_env_name_on_rg(cmd, env, resource_group_name, location, custom_locatio
                     "Environment {} already exists in resource group {} on location {}, cannot change location of existing environment to {}.".format(
                         env_name, resource_group_name, env_def["location"], location))
             if resource_type and CONNECTED_ENVIRONMENT_TYPE.lower() == resource_type.lower():
-                if custom_location and env_def["extendedLocation"]["name"].lower() != custom_location.lower():
+                if custom_location_id and env_def["extendedLocation"]["name"].lower() != custom_location_id.lower():
                     raise ValidationError(
                         "Environment {} already exists in resource group {} with custom location {}, cannot change custom location of existing environment to {}.".format(
-                            env_name, resource_group_name, env_def["extendedLocation"]["name"], custom_location))
+                            env_name, resource_group_name, env_def["extendedLocation"]["name"], custom_location_id))
                 if connected_cluster_id:
                     custom_location_from_env = get_custom_location(cmd=cmd,
                                                                    custom_location=env_def["extendedLocation"]["name"])
