@@ -52,6 +52,7 @@ from ._utils import (
     list_cluster_extensions,
     get_connected_k8s,
     _validate_connected_k8s,
+    get_cluster_extension,
 )
 
 from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, MAXIMUM_CONTAINER_APP_NAME_LENGTH, MANAGED_ENVIRONMENT_TYPE, CONNECTED_ENVIRONMENT_TYPE, CUSTOM_LOCATION_RP, KUBERNETES_CONFIGURATION_RP
@@ -148,7 +149,7 @@ class Resource:
         return self.exists
 
 
-class Extension:
+class Extension(Resource):
     def __init__(
             self,
             cmd,
@@ -172,6 +173,8 @@ class Extension:
         self.logs_share_key = logs_share_key
         self.connected_cluster_id = connected_cluster_id
         self.connected_environment_name = connected_environment_name
+        resource_group = ResourceGroup(cmd, logs_rg, logs_location)
+        super().__init__(cmd, name, resource_group, exists)
 
     def create(self):
         extension = create_extension(cmd=self.cmd,
@@ -182,8 +185,7 @@ class Extension:
                                      location=self.logs_location,
                                      logs_rg=self.logs_rg)
         self.exists = True
-        self.name = extension.name
-        self.cluster_extension_id = extension.id
+        return extension
 
     def create_if_needed(self):
         if self.name is None:
@@ -198,6 +200,9 @@ class Extension:
                 f"Using {type(self).__name__} '{self.name}' in cluster {self.connected_cluster_id}"
             )  # TODO use .info()
 
+    def _get(self):
+        return get_cluster_extension(self, self.get_rid())
+
     def get_rid(self):
         rid = self.name
         if not is_valid_resource_id(self.name):
@@ -205,7 +210,7 @@ class Extension:
         return rid
 
 
-class CustomLocation:
+class CustomLocation(Resource):
     def __init__(
         self,
         cmd,
@@ -233,11 +238,15 @@ class CustomLocation:
             if "resource_group" in custom_location_dict:
                 self.resource_group_name = custom_location_dict["resource_group"]
 
+        resource_group = ResourceGroup(cmd, self.resource_group_name, location)
+        super().__init__(cmd, name, resource_group, exists)
+
     def create(self):
         register_provider_if_needed(self.cmd, CUSTOM_LOCATION_RP)
         custom_location = create_custom_location(
-            self.cmd,
-            self.name,
+            cmd=self.cmd,
+            custom_location_name=self.name,
+            resource_group=self.resource_group_name,
             location=self.location,
             connected_cluster_id=self.connected_cluster_id,
             cluster_extension_id=self.cluster_extension_id,
@@ -258,6 +267,9 @@ class CustomLocation:
             logger.warning(
                 f"Using {type(self).__name__} '{self.name}' in resource group {self.resource_group_name}"
             )  # TODO use .info()
+
+    def _get(self):
+        return get_custom_location(self, custom_location=self.get_rid())
 
     def set_name(self, name_or_rid):
         if is_valid_resource_id(name_or_rid):
@@ -365,7 +377,7 @@ class ContainerAppEnvironment(Resource):
                 self.cmd,
                 self.name,
                 location=self.location,
-                custom_location_id=self.custom_location_id,
+                custom_location=self.custom_location_id,
                 resource_group_name=self.resource_group.name,
             )
         else:
@@ -935,7 +947,7 @@ def _set_up_defaults(
 
     env_list = []
     # try to set RG name by env name
-    if env.name and not resource_group.name and not env.is_connected_environment_type():
+    if not env.is_connected_environment_type() and env.name and not resource_group.name:
         if not location:
             env_list = [e for e in list_managed_environments(cmd=cmd) if e["name"] == env.name]
         else:
@@ -986,6 +998,7 @@ def _set_up_defaults(
         env.name = env.name if env.name else "{}-env".format(name).replace("_", "-")
         if env.custom_location_id is None:
             custom_location.name = get_randomized_name_with_dash(prefix=get_profile_username(), name=custom_location.name, initial="env-location", random_int=random_int)
+            custom_location.resource_group_name = resource_group.name
             env.custom_location_id = custom_location.get_rid()
             if extension.name is None:
                 extension.name = 'containerapps-ext'
