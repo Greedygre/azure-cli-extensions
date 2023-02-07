@@ -163,8 +163,8 @@ class Extension(Resource):
             connected_cluster_id=None,
             connected_environment_name=None,
     ):
-        self.cmd = cmd
-        self.name = name
+        resource_group = ResourceGroup(cmd, logs_rg, logs_location)
+        super().__init__(cmd, name, resource_group, exists)
         self.exists = exists
         self.namespace = namespace
         self.logs_location = logs_location
@@ -173,8 +173,6 @@ class Extension(Resource):
         self.logs_share_key = logs_share_key
         self.connected_cluster_id = connected_cluster_id
         self.connected_environment_name = connected_environment_name
-        resource_group = ResourceGroup(cmd, logs_rg, logs_location)
-        super().__init__(cmd, name, resource_group, exists)
 
     def create(self):
         extension = create_extension(cmd=self.cmd,
@@ -222,8 +220,8 @@ class CustomLocation(Resource):
         cluster_extension_id=None,
         connected_cluster_id=None,
     ):
-        self.cmd = cmd
-        self.name = name
+        resource_group = ResourceGroup(cmd, resource_group_name, location)
+        super().__init__(cmd, name, resource_group, exists)
         self.resource_group_name = resource_group_name
         self.exists = exists
         self.location = location
@@ -237,9 +235,6 @@ class CustomLocation(Resource):
             self.exists = True
             if "resource_group" in custom_location_dict:
                 self.resource_group_name = custom_location_dict["resource_group"]
-
-        resource_group = ResourceGroup(cmd, self.resource_group_name, location)
-        super().__init__(cmd, name, resource_group, exists)
 
     def create(self):
         register_provider_if_needed(self.cmd, CUSTOM_LOCATION_RP)
@@ -708,7 +703,7 @@ def _get_app_env_and_group(
         if env.name:
             matched_apps = [c for c in matched_apps if parse_resource_id(c["properties"]["environmentId"])["name"].lower() == env.name.lower()]
         if env.custom_location_id:
-            matched_apps = [c for c in matched_apps if c["extendedLocation"]["name"].lower() == env.custom_location_id.lower()]
+            matched_apps = [c for c in matched_apps if (c.get("extendedLocation") and c["extendedLocation"]["name"].lower() == env.custom_location_id.lower())]
         elif env.resource_type:
             matched_apps = [c for c in matched_apps if parse_resource_id(c["properties"]["environmentId"])["resource_type"].lower() == env.resource_type.lower()]
         if location:
@@ -1006,6 +1001,7 @@ def _set_up_defaults(
                 extension.name = 'containerapps-ext'
                 extension.namespace = "containerapp-ns"
                 extension.logs_rg = resource_group.name
+                extension.logs_location = resource_group.location
                 extension.connected_environment_name = env.name
                 custom_location.cluster_extension_id = extension.get_rid()
 
