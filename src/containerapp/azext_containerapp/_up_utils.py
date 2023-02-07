@@ -55,7 +55,7 @@ from ._utils import (
     get_cluster_extension
 )
 
-from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, MAXIMUM_CONTAINER_APP_NAME_LENGTH, MANAGED_ENVIRONMENT_TYPE, CONNECTED_ENVIRONMENT_TYPE, CUSTOM_LOCATION_RP, KUBERNETES_CONFIGURATION_RP
+from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, MAXIMUM_CONTAINER_APP_NAME_LENGTH, MANAGED_ENVIRONMENT_TYPE, CONNECTED_ENVIRONMENT_TYPE, CUSTOM_LOCATION_RP, KUBERNETES_CONFIGURATION_RP, CONTAINER_APP_EXTENSION_TYPE
 
 from .custom import (
     create_managed_environment,
@@ -777,7 +777,7 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
 
         extension_list = list_cluster_extensions(cmd, connected_cluster_id=custom_location.connected_cluster_id)
         for e in extension_list:
-            if e.extension_type.lower() == "Microsoft.App.Environment".lower():
+            if e.extension_type.lower() == CONTAINER_APP_EXTENSION_TYPE:
                 extension.exists = True
                 extension.name = e.name
                 extension.namespace = e.scope.cluster.release_namespace
