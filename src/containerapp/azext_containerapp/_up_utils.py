@@ -947,6 +947,8 @@ def _set_up_defaults(
 
     env_list = []
     # try to set RG name by env name
+    # If two environments are found, one manager/one connected, use managed env.
+    # If the unique environment is found, create container apps under it.
     if not env.is_connected_environment_type() and env.name and not resource_group.name:
         if not location:
             env_list = [e for e in list_managed_environments(cmd=cmd) if e["name"] == env.name]
@@ -960,8 +962,8 @@ def _set_up_defaults(
                 f"There are multiple environments with name {env.name} on the subscription. "
                 "Please specify which resource group your Containerapp environment is in."
             )    # get ACR details from --image, if possible
-    # try to set env and RG
-    if env.is_connected_environment_type() and (not env.name or not resource_group.name or not env.custom_location_id):
+
+    if not env.resource_type or (env.is_connected_environment_type() and (not env.name or not resource_group.name or not env.custom_location_id)):
         connected_env_list = list_connected_environments(cmd=cmd, resource_group_name=resource_group_name)
         for e in connected_env_list:
             if env.name and env.name != e["name"]:
