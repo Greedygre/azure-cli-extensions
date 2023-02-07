@@ -777,9 +777,6 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
         connected_cluster = get_connected_k8s(cmd, custom_location.connected_cluster_id)
         custom_location.location = connected_cluster.location
 
-        if custom_location.resource_group_name is None:
-            custom_location.resource_group_name = connected_cluster.resource_group
-
         extension_list = list_cluster_extensions(cmd, connected_cluster_id=custom_location.connected_cluster_id)
         for e in extension_list:
             if e.extension_type.lower() == "Microsoft.App.Environment".lower():
