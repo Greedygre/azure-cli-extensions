@@ -176,6 +176,7 @@ class Extension(Resource):
 
     def create(self):
         extension = create_extension(cmd=self.cmd,
+                                     extension_name=self.name,
                                      connected_cluster_id=self.connected_cluster_id,
                                      connected_environment_name=self.connected_environment_name,
                                      logs_customer_id=self.logs_customer_id,

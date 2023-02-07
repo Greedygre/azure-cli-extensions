@@ -1457,9 +1457,8 @@ def _validate_custom_loc_and_location(cmd, custom_location=None, env=None, conne
     if not is_valid_resource_id(custom_location):
         raise ValidationError('{} is not a valid Azure resource ID.'.format(custom_location))
 
-    try:
-        r = get_custom_location(cmd=cmd, custom_location_id=custom_location)
-    except:
+    r = get_custom_location(cmd=cmd, custom_location_id=custom_location)
+    if r is None:
         raise ResourceNotFoundError("Cannot find custom location with custom location ID {}".format(custom_location))
 
     if connected_cluster_id:
@@ -1578,7 +1577,7 @@ def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id
     return extension_list
 
 
-def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns',
+def create_extension(cmd, extension_name='containerapps-ext', connected_cluster_id=None, namespace='containerapp-ns',
                      connected_environment_name=None, logs_customer_id=None, logs_share_key=None, location=None,
                      logs_rg=None):
     from azure.mgmt.kubernetesconfiguration import models
@@ -1593,7 +1592,6 @@ def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns'
     cluster_rp = parsed_extension.get("namespace")
     cluster_type = parsed_extension.get("type")
     cluster_name = parsed_extension.get("name")
-    ext_name = 'containerapps-ext'
 
     e = models.Extension()
     e.extension_type = CONTAINER_APP_EXTENSION_TYPE
@@ -1621,7 +1619,7 @@ def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns'
         resource_group_name=cluster_rg,
         cluster_rp=cluster_rp,
         cluster_resource_name=cluster_type,
-        cluster_name=cluster_name, extension_name=ext_name,
+        cluster_name=cluster_name, extension_name=extension_name,
         extension=e)
     extension = LongRunningOperation(cmd.cli_ctx)(poller)
     return extension
