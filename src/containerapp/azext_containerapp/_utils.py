@@ -23,12 +23,9 @@ from knack.log import get_logger
 from msrestazure.tools import parse_resource_id, is_valid_resource_id, resource_id
 
 from ._clients import ContainerAppClient, ManagedEnvironmentClient, ConnectedEnvironmentClient
-from ._client_factory import handle_raw_exception, providers_client_factory, cf_resource_groups, \
-    log_analytics_client_factory, log_analytics_shared_key_client_factory, customlocation_client_factory, \
-    connected_k8s_client_factory
-from ._constants import (MAXIMUM_CONTAINER_APP_NAME_LENGTH, SHORT_POLLING_INTERVAL_SECS, LONG_POLLING_INTERVAL_SECS, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, ACR_IMAGE_SUFFIX, CONNECTED_ENV_CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, CONNECTED_CLUSTER_TYPE)
+from ._client_factory import handle_raw_exception, providers_client_factory, cf_resource_groups, log_analytics_client_factory, log_analytics_shared_key_client_factory, customlocation_client_factory, connected_k8s_client_factory, k8s_extension_client_factory
+from ._constants import (MAXIMUM_CONTAINER_APP_NAME_LENGTH, SHORT_POLLING_INTERVAL_SECS, LONG_POLLING_INTERVAL_SECS, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, ACR_IMAGE_SUFFIX, CONNECTED_ENV_CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, CONNECTED_CLUSTER_TYPE, CONTAINER_APP_EXTENSION_TYPE)
 from ._models import (ContainerAppCustomDomainEnvelope as ContainerAppCustomDomainEnvelopeModel)
-from ._client_factory import k8s_extension_client_factory
 
 logger = get_logger(__name__)
 
@@ -1461,7 +1458,7 @@ def _validate_custom_loc_and_location(cmd, custom_location=None, env=None, conne
     try:
         r = get_custom_location(cmd=cmd, custom_location_id=custom_location)
     except:
-        raise ResourceNotFoundError("Cannot find Custom location with custom location ID {}".format(custom_location))
+        raise ResourceNotFoundError("Cannot find custom location with custom location ID {}".format(custom_location))
 
     if connected_cluster_id:
         if connected_cluster_id.lower() != r.host_resource_id.lower():
@@ -1479,7 +1476,7 @@ def _validate_custom_loc_and_location(cmd, custom_location=None, env=None, conne
     check_extension_type = False
     for extension_id in r.cluster_extension_ids:
         extension = get_cluster_extension(cmd, extension_id)
-        if extension.extension_type.lower() == "Microsoft.App.Environment".lower():
+        if extension.extension_type.lower() == CONTAINER_APP_EXTENSION_TYPE:
             check_extension_type = True
             break
     if not check_extension_type:
@@ -1597,7 +1594,7 @@ def create_extension(cmd, connected_cluster_id=None, namespace='containerapp-ns'
     ext_name = 'containerapps-ext'
 
     e = models.Extension()
-    e.extension_type = 'microsoft.app.environment'
+    e.extension_type = CONTAINER_APP_EXTENSION_TYPE
     e.release_train = 'stable'
     e.auto_upgrade_minor_version = True
 

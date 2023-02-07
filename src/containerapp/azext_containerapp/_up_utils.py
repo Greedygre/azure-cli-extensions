@@ -52,7 +52,7 @@ from ._utils import (
     list_cluster_extensions,
     get_connected_k8s,
     _validate_connected_k8s,
-    get_cluster_extension,
+    get_cluster_extension
 )
 
 from ._constants import MAXIMUM_SECRET_LENGTH, LOG_ANALYTICS_RP, CONTAINER_APPS_RP, ACR_IMAGE_SUFFIX, MAXIMUM_CONTAINER_APP_NAME_LENGTH, MANAGED_ENVIRONMENT_TYPE, CONNECTED_ENVIRONMENT_TYPE, CUSTOM_LOCATION_RP, KUBERNETES_CONFIGURATION_RP
