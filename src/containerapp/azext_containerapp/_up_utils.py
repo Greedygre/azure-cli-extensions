@@ -317,7 +317,10 @@ class ContainerAppEnvironment(Resource):
                 if resource_group.name != rg:
                     self.resource_group = ResourceGroup(cmd, rg, location)
             if "resource_type" in env_dict:
-                self.resource_type = env_dict["resource_type"]
+                if env_dict["resource_type"].lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
+                    self.resource_type = CONNECTED_ENVIRONMENT_TYPE
+                else:
+                    self.resource_type = MANAGED_ENVIRONMENT_TYPE
         if self.resource_type is None:
             if custom_location_id or connected_cluster_id:
                 self.resource_type = CONNECTED_ENVIRONMENT_TYPE
@@ -343,7 +346,7 @@ class ContainerAppEnvironment(Resource):
             self.name = name_or_rid
 
     def is_connected_environment_type(self):
-        if self.resource_type and self.resource_type.lower() == CONNECTED_ENVIRONMENT_TYPE.lower():
+        if self.resource_type and self.resource_type == CONNECTED_ENVIRONMENT_TYPE:
             return True
         return False
 
