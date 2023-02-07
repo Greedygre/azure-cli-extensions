@@ -1456,19 +1456,16 @@ def _validate_custom_loc_and_location(cmd, custom_location=None, env=None, conne
     from ._up_utils import list_connected_environments
 
     if not is_valid_resource_id(custom_location):
-        raise ValidationError(
-            '{} is not a valid Azure resource ID.'.format(custom_location)
-        )
+        raise ValidationError('{} is not a valid Azure resource ID.'.format(custom_location))
 
     try:
-        r = get_custom_location(cmd=cmd, custom_location=custom_location)
+        r = get_custom_location(cmd=cmd, custom_location_id=custom_location)
     except:
         raise ResourceNotFoundError("Cannot find Custom location with custom location ID {}".format(custom_location))
 
     if connected_cluster_id:
         if connected_cluster_id.lower() != r.host_resource_id.lower():
-            raise ValidationError(
-                'Custom location {} not in cluster {}.'.format(custom_location, connected_cluster_id))
+            raise ValidationError('Custom location {} not in cluster {}.'.format(custom_location, connected_cluster_id))
 
     # check env
     if env:
@@ -1476,9 +1473,7 @@ def _validate_custom_loc_and_location(cmd, custom_location=None, env=None, conne
                     list_connected_environments(cmd=cmd, resource_group_name=env_rg, custom_location=custom_location) if
                     (e["id"].lower() != env.lower() and e["name"] != env)]
         if len(env_list) > 0:
-            raise ValidationError(
-                'The provided custom location already used by other environment. If you want to use this custom location, please specify associated environment with --environment. \n Otherwise, please use another custom location.'
-            )
+            raise ValidationError('The provided custom location already used by other environment. If you want to use this custom location, please specify associated environment with --environment. \n Otherwise, please use another custom location.')
 
     # check extension type
     check_extension_type = False
@@ -1488,40 +1483,35 @@ def _validate_custom_loc_and_location(cmd, custom_location=None, env=None, conne
             check_extension_type = True
             break
     if not check_extension_type:
-        raise ValidationError(
-            'There is no Microsoft.App.Environment extension found associated with custom location {}'.format(
-                custom_location)
-        )
+        raise ValidationError('There is no Microsoft.App.Environment extension found associated with custom location {}'.format(custom_location))
 
     return r.location
 
 
 def _validate_connected_k8s(cmd, connected_cluster_id=None):
     if not is_valid_resource_id(connected_cluster_id):
-        raise ValidationError(
-            '{} is not a valid Azure resource ID.'.format(connected_cluster_id)
-        )
+        raise ValidationError('{} is not a valid Azure resource ID.'.format(connected_cluster_id))
     parsed_connected_cluster = parse_resource_id(connected_cluster_id)
     cluster_type = parsed_connected_cluster.get("type")
     if cluster_type != CONNECTED_CLUSTER_TYPE:
-        raise ValidationError(
-            '{} is not a connectedCluster resource ID.'.format(connected_cluster_id)
-        )
+        raise ValidationError('{} is not a connectedCluster resource ID.'.format(connected_cluster_id))
     try:
         connected_cluster = get_connected_k8s(cmd, connected_cluster_id=connected_cluster_id)
     except:
-        raise ResourceNotFoundError(
-            "Cannot find connected cluster with connected cluster ID {}".format(connected_cluster_id))
+        raise ResourceNotFoundError("Cannot find connected cluster with connected cluster ID {}".format(connected_cluster_id))
 
 
-def get_custom_location(cmd, custom_location):
-    parsed_custom_loc = parse_resource_id(custom_location)
+def get_custom_location(cmd, custom_location_id):
+    parsed_custom_loc = parse_resource_id(custom_location_id)
     subscription_id = parsed_custom_loc.get("subscription")
     custom_loc_name = parsed_custom_loc["name"]
     custom_loc_rg = parsed_custom_loc["resource_group"]
-    return customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).get(
-        resource_group_name=custom_loc_rg,
-        resource_name=custom_loc_name)
+    custom_location = None
+    try:
+        custom_location = customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).get(resource_group_name=custom_loc_rg, resource_name=custom_loc_name)
+    except:
+        pass
+    return custom_location
 
 
 def list_custom_location(cmd, resource_group=None, connected_cluster_id=None):

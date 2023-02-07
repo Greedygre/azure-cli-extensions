@@ -269,7 +269,7 @@ class CustomLocation(Resource):
             )  # TODO use .info()
 
     def _get(self):
-        return get_custom_location(self, custom_location=self.get_rid())
+        return get_custom_location(self, custom_location_id=self.get_rid())
 
     def set_name(self, name_or_rid):
         if is_valid_resource_id(name_or_rid):
@@ -769,7 +769,7 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
         extension: "Extension"
 ):
     #  if connected cluster have one custom location (with ext namespace) bind to the container app ext, then use it.
-    if custom_location.name is None and custom_location.connected_cluster_id is None:
+    if env.custom_location_id is None and custom_location.connected_cluster_id is None:
         raise ValidationError(
             "please specify one of connected-cluster-id or custom location you want to create the Connected environment.")
 
@@ -971,8 +971,8 @@ def _set_up_defaults(
             if custom_location.name and e["extendedLocation"]["name"].lower() != custom_location.get_rid().lower():
                 continue
             if custom_location.connected_cluster_id:
-                custom_location_from_env = get_custom_location(cmd=cmd, custom_location=e["extendedLocation"]["name"])
-                if custom_location.connected_cluster_id.lower() != custom_location_from_env.host_resource_id.lower():
+                custom_location_from_env = get_custom_location(cmd=cmd, custom_location_id=e["extendedLocation"]["name"])
+                if custom_location_from_env is None or custom_location.connected_cluster_id.lower() != custom_location_from_env.host_resource_id.lower():
                     continue
             env_list.append(e)
 
@@ -1176,22 +1176,14 @@ def check_env_name_on_rg(cmd, env, resource_group_name, location, custom_locatio
             pass
         if env_def:
             if location and location != format_location(env_def["location"]):
-                raise ValidationError(
-                    "Environment {} already exists in resource group {} on location {}, cannot change location of existing environment to {}.".format(
-                        env_name, resource_group_name, env_def["location"], location))
+                raise ValidationError("Environment {} already exists in resource group {} on location {}, cannot change location of existing environment to {}.".format(env_name, resource_group_name, env_def["location"], location))
             if resource_type and CONNECTED_ENVIRONMENT_TYPE.lower() == resource_type.lower():
                 if custom_location_id and env_def["extendedLocation"]["name"].lower() != custom_location_id.lower():
-                    raise ValidationError(
-                        "Environment {} already exists in resource group {} with custom location {}, cannot change custom location of existing environment to {}.".format(
-                            env_name, resource_group_name, env_def["extendedLocation"]["name"], custom_location_id))
+                    raise ValidationError("Environment {} already exists in resource group {} with custom location {}, cannot change custom location of existing environment to {}.".format(env_name, resource_group_name, env_def["extendedLocation"]["name"], custom_location_id))
                 if connected_cluster_id:
-                    custom_location_from_env = get_custom_location(cmd=cmd,
-                                                                   custom_location=env_def["extendedLocation"]["name"])
+                    custom_location_from_env = get_custom_location(cmd=cmd, custom_location_id=env_def["extendedLocation"]["name"])
                     if connected_cluster_id.lower() != custom_location_from_env.host_resource_id.lower():
-                        raise ValidationError(
-                            "Environment {} already exists in resource group {} on connected cluster {}, cannot change connected cluster of existing environment to {}.".format(
-                                env_name, custom_location_from_env.host_resource_id, env_def["location"],
-                                connected_cluster_id))
+                        raise ValidationError("Environment {} already exists in resource group {} on connected cluster {}, cannot change connected cluster of existing environment to {}.".format(env_name, custom_location_from_env.host_resource_id, env_def["location"], connected_cluster_id))
 
 
 def format_location(location=None):
