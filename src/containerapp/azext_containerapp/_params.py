@@ -316,6 +316,8 @@ def load_arguments(self, _):
         c.argument('name', configured_default='name', id_part=None)
         c.argument('env', configured_default='env')
         c.argument('registry_server', configured_default='registry_server')
+        c.argument('custom_location_id', options_list=['--custom-location'], help="Resource ID of custom location. List using 'az customlocation list'.")
+        c.argument('connected_cluster_id', help="Resource ID of connected cluster. List using 'az connectedk8s list'.", configured_default='connected_cluster_id')
         c.argument('source', help='Local directory path to upload to Azure container registry.')
         c.argument('image', options_list=['--image', '-i'], help="Container image, e.g. publisher/image-name:tag.")
         c.argument('browse', help='Open the app in a web browser after creation and deployment, if possible.')

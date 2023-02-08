@@ -55,22 +55,31 @@ from ._models import (
     AzureFileProperties as AzureFilePropertiesModel)
 from ._utils import (_validate_subscription_registered, _get_location_from_resource_group, _ensure_location_allowed,
                      parse_secret_flags, store_as_secret_and_return_secret_ref, parse_env_var_flags,
-                     _generate_log_analytics_if_not_provided, _get_existing_secrets, _convert_object_from_snake_to_camel_case,
-                     _object_to_dict, _add_or_update_secrets, _remove_additional_attributes, _remove_readonly_attributes,
-                     _add_or_update_env_vars, _add_or_update_tags, update_nested_dictionary, _update_revision_weights, _append_label_weights,
-                     _get_app_from_revision, raise_missing_token_suggestion, _infer_acr_credentials, _remove_registry_secret, _remove_secret,
-                     _ensure_identity_resource_id, _remove_dapr_readonly_attributes, _remove_env_vars, _validate_traffic_sum,
+                     _generate_log_analytics_if_not_provided, _get_existing_secrets,
+                     _convert_object_from_snake_to_camel_case,
+                     _object_to_dict, _add_or_update_secrets, _remove_additional_attributes,
+                     _remove_readonly_attributes,
+                     _add_or_update_env_vars, _add_or_update_tags, update_nested_dictionary, _update_revision_weights,
+                     _append_label_weights,
+                     _get_app_from_revision, raise_missing_token_suggestion, _infer_acr_credentials,
+                     _remove_registry_secret, _remove_secret,
+                     _ensure_identity_resource_id, _remove_dapr_readonly_attributes, _remove_env_vars,
+                     _validate_traffic_sum,
                      _update_revision_env_secretrefs, _get_acr_cred, safe_get, await_github_action, repo_url_to_name,
                      validate_container_app_name, _update_weights, get_vnet_location, register_provider_if_needed,
                      generate_randomized_cert_name, _get_name, load_cert_file, check_cert_name_availability,
-                     validate_hostname, patch_new_custom_domain, get_custom_domains, _validate_revision_name, set_managed_identity,
-                     clean_null_values, _populate_secret_values, connected_env_check_cert_name_availability, _validate_custom_loc_and_location)
+                     validate_hostname, patch_new_custom_domain, get_custom_domains, _validate_revision_name,
+                     set_managed_identity,
+                     clean_null_values, _populate_secret_values, connected_env_check_cert_name_availability,
+                     _validate_custom_loc_and_location)
 
 
 from ._ssh_utils import (SSH_DEFAULT_ENCODING, WebSocketConnection, read_ssh, get_stdin_writer, SSH_CTRL_C_MSG,
                          SSH_BACKUP_ENCODING)
-from ._constants import (MAXIMUM_SECRET_LENGTH, MICROSOFT_SECRET_SETTING_NAME, FACEBOOK_SECRET_SETTING_NAME, GITHUB_SECRET_SETTING_NAME,
-                         GOOGLE_SECRET_SETTING_NAME, TWITTER_SECRET_SETTING_NAME, APPLE_SECRET_SETTING_NAME, CONTAINER_APPS_RP,
+from ._constants import (MAXIMUM_SECRET_LENGTH, MICROSOFT_SECRET_SETTING_NAME, FACEBOOK_SECRET_SETTING_NAME,
+                         GITHUB_SECRET_SETTING_NAME,
+                         GOOGLE_SECRET_SETTING_NAME, TWITTER_SECRET_SETTING_NAME, APPLE_SECRET_SETTING_NAME,
+                         CONTAINER_APPS_RP,
                          NAME_INVALID, NAME_ALREADY_EXISTS, ACR_IMAGE_SUFFIX)
 
 logger = get_logger(__name__)
@@ -2469,21 +2478,24 @@ def containerapp_up(cmd,
                     context_path=None,
                     service_principal_client_id=None,
                     service_principal_client_secret=None,
-                    service_principal_tenant_id=None):
+                    service_principal_tenant_id=None,
+                    custom_location_id=None,
+                    connected_cluster_id=None):
     from ._up_utils import (_validate_up_args, _reformat_image, _get_dockerfile_content, _get_ingress_and_target_port,
-                            ResourceGroup, ContainerAppEnvironment, ContainerApp, _get_registry_from_app,
+                            ResourceGroup, ContainerAppEnvironment, ContainerApp, CustomLocation, Extension, _get_registry_from_app,
                             _get_registry_details, _create_github_action, _set_up_defaults, up_output,
-                            check_env_name_on_rg, get_token, _validate_containerapp_name)
+                            check_env_name_on_rg, get_token, _validate_containerapp_name, format_location)
     from ._github_oauth import cache_github_token
     HELLOWORLD = "mcr.microsoft.com/azuredocs/containerapps-helloworld"
     dockerfile = "Dockerfile"  # for now the dockerfile name must be "Dockerfile" (until GH actions API is updated)
-
+    location = format_location(location)
     _validate_containerapp_name(name)
 
     register_provider_if_needed(cmd, CONTAINER_APPS_RP)
-    _validate_up_args(cmd, source, image, repo, registry_server)
+    _validate_up_args(cmd, source, image, repo, registry_server, env, resource_group_name, location, custom_location_id, connected_cluster_id)
     validate_container_app_name(name)
-    check_env_name_on_rg(cmd, env, resource_group_name, location)
+
+    check_env_name_on_rg(cmd, env, resource_group_name, location, custom_location_id, connected_cluster_id)
 
     image = _reformat_image(source, repo, image)
     token = get_token(cmd, repo, token)
@@ -2501,16 +2513,20 @@ def containerapp_up(cmd,
     ingress, target_port = _get_ingress_and_target_port(ingress, target_port, dockerfile_content)
 
     resource_group = ResourceGroup(cmd, name=resource_group_name, location=location)
-    env = ContainerAppEnvironment(cmd, env, resource_group, location=location, logs_key=logs_key, logs_customer_id=logs_customer_id)
+    custom_location = CustomLocation(cmd, name=custom_location_id, resource_group_name=resource_group_name, connected_cluster_id=connected_cluster_id)
+    extension = Extension(cmd, logs_rg=resource_group_name, logs_location=location, logs_share_key=logs_key, logs_customer_id=logs_customer_id, connected_cluster_id=connected_cluster_id, connected_environment_name=env)
+    env = ContainerAppEnvironment(cmd, env, resource_group, location=location, logs_key=logs_key, logs_customer_id=logs_customer_id, custom_location_id=custom_location_id, connected_cluster_id=connected_cluster_id)
     app = ContainerApp(cmd, name, resource_group, None, image, env, target_port, registry_server, registry_user, registry_pass, env_vars, ingress)
 
-    _set_up_defaults(cmd, name, resource_group_name, logs_customer_id, location, resource_group, env, app)
+    _set_up_defaults(cmd, name, resource_group_name, logs_customer_id, location, resource_group, env, app, custom_location, extension)
 
     if app.check_exists():
         if app.get()["properties"]["provisioningState"] == "InProgress":
             raise ValidationError("Containerapp has an existing provisioning in progress. Please wait until provisioning has completed and rerun the command.")
 
     resource_group.create_if_needed()
+    extension.create_if_needed()
+    custom_location.create_if_needed()
     env.create_if_needed(name)
 
     if source or repo:
@@ -2535,16 +2551,16 @@ def containerapp_up(cmd,
     up_output(app)
 
 
-def containerapp_up_logic(cmd, resource_group_name, name, env, image, env_vars, ingress, target_port, registry_server, registry_user, registry_pass):
+def containerapp_up_logic(cmd, resource_group_name, name, env, image, env_vars, ingress, target_port, registry_server, registry_user, registry_pass, is_connected_environment_type):
     containerapp_def = None
     try:
         containerapp_def = ContainerAppClient.show(cmd=cmd, resource_group_name=resource_group_name, name=name)
     except:
         pass
-
+    environment_type = "connected" if is_connected_environment_type else "managed"
     if containerapp_def:
         return update_containerapp_logic(cmd=cmd, name=name, resource_group_name=resource_group_name, image=image, replace_env_vars=env_vars, ingress=ingress, target_port=target_port, registry_server=registry_server, registry_user=registry_user, registry_pass=registry_pass, container_name=name)
-    return create_containerapp(cmd=cmd, name=name, resource_group_name=resource_group_name, env=env, image=image, env_vars=env_vars, ingress=ingress, target_port=target_port, registry_server=registry_server, registry_user=registry_user, registry_pass=registry_pass)
+    return create_containerapp(cmd=cmd, name=name, resource_group_name=resource_group_name, env=env, environment_type=environment_type, image=image, env_vars=env_vars, ingress=ingress, target_port=target_port, registry_server=registry_server, registry_user=registry_user, registry_pass=registry_pass)
 
 
 def list_certificates(cmd, name, resource_group_name, location=None, certificate=None, thumbprint=None):

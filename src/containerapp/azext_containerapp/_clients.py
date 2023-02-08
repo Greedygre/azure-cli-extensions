@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 STABLE_API_VERSION = "2022-03-01"
 PREVIEW_API_VERSION = "2022-06-01-preview"
-POLLING_TIMEOUT = 60  # how many seconds before exiting
+POLLING_TIMEOUT = 600  # how many seconds before exiting
 POLLING_SECONDS = 2  # how many seconds between requests
 
 
@@ -54,7 +54,7 @@ def poll(cmd, request_url, poll_if_status):  # pylint: disable=inconsistent-retu
             r = send_raw_request(cmd.cli_ctx, "GET", request_url)
             r2 = r.json()
 
-            if "properties" not in r2 or "provisioningState" not in r2["properties"] or not r2["properties"]["provisioningState"].lower() == poll_if_status:
+            if "properties" not in r2 or "provisioningState" not in r2["properties"] or r2["properties"]["provisioningState"].lower() in ["succeeded", "failed", "canceled"]:
                 break
             start = time.time()
 

@@ -13,6 +13,13 @@ ACR_IMAGE_SUFFIX = ".azurecr.io"
 
 LOG_ANALYTICS_RP = "Microsoft.OperationalInsights"
 CONTAINER_APPS_RP = "Microsoft.App"
+CUSTOM_LOCATION_RP = "Microsoft.ExtendedLocation"
+KUBERNETES_CONFIGURATION_RP = "Microsoft.KubernetesConfiguration"
+CONTAINER_APP_EXTENSION_TYPE = "microsoft.app.environment"
+KUBERNETES_RP = "Microsoft.Kubernetes"
+MANAGED_ENVIRONMENT_TYPE = "managedEnvironments"
+CONNECTED_ENVIRONMENT_TYPE = "connectedEnvironments"
+CONNECTED_CLUSTER_TYPE = "connectedClusters"
 
 MAX_ENV_PER_LOCATION = 2
 

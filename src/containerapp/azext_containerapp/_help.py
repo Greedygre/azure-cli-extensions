@@ -126,6 +126,9 @@ helps['containerapp up'] = """
     - name: Create a container app from an image in a registry with ingress enabled and a specified environment
       text: |
           az containerapp up -n MyContainerapp --image myregistry.azurecr.io/myImage:myTag --ingress external --target-port 80 --environment MyEnv
+    - name: Create a container app from an image in a registry on Connected cluster
+      text: |
+          az containerapp up -n MyContainerapp --image myregistry.azurecr.io/myImage:myTag --connected-cluster-id MyConnectedClusterResourceId
 """
 
 helps['containerapp logs'] = """

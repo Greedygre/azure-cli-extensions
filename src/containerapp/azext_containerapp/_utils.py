@@ -7,6 +7,7 @@
 import time
 import json
 import platform
+from base64 import b64encode
 
 from urllib.parse import urlparse
 from datetime import datetime
@@ -14,6 +15,7 @@ from dateutil.relativedelta import relativedelta
 from azure.cli.core.azclierror import (ValidationError, RequiredArgumentMissingError, CLIInternalError,
                                        ResourceNotFoundError, FileOperationError, CLIError)
 from azure.cli.core.commands.client_factory import get_subscription_id
+from azure.cli.core.commands import LongRunningOperation
 from azure.cli.command_modules.appservice.utils import _normalize_location
 from azure.cli.command_modules.network._client_factory import network_client_factory
 
@@ -21,10 +23,10 @@ from knack.log import get_logger
 from msrestazure.tools import parse_resource_id, is_valid_resource_id, resource_id
 
 from ._clients import ContainerAppClient, ManagedEnvironmentClient, ConnectedEnvironmentClient
-from ._client_factory import handle_raw_exception, providers_client_factory, cf_resource_groups, log_analytics_client_factory, log_analytics_shared_key_client_factory
+from ._client_factory import handle_raw_exception, providers_client_factory, cf_resource_groups, log_analytics_client_factory, log_analytics_shared_key_client_factory, customlocation_client_factory, connected_k8s_client_factory, k8s_extension_client_factory
 from ._constants import (MAXIMUM_CONTAINER_APP_NAME_LENGTH, SHORT_POLLING_INTERVAL_SECS, LONG_POLLING_INTERVAL_SECS,
                          LOG_ANALYTICS_RP, CONTAINER_APPS_RP, CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, ACR_IMAGE_SUFFIX,
-                         CONNECTED_ENV_CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE)
+                         CONNECTED_ENV_CHECK_CERTIFICATE_NAME_AVAILABILITY_TYPE, CONNECTED_CLUSTER_TYPE, CONTAINER_APP_EXTENSION_TYPE)
 from ._models import (ContainerAppCustomDomainEnvelope as ContainerAppCustomDomainEnvelopeModel)
 
 logger = get_logger(__name__)
@@ -1034,13 +1036,21 @@ def is_platform_windows():
     return platform.system() == "Windows"
 
 
-def get_randomized_name(prefix, name=None, initial="rg"):
+def get_randomized_name(prefix, name=None, initial="rg", random_int=None):
     from random import randint
-    default = "{}_{}_{:04}".format(prefix, initial, randint(0, 9999))
+    random_int = random_int if random_int else randint(0, 9999)
+    default = "{}_{}_{:04}".format(prefix, initial, random_int)
     if name is not None:
         return name
     return default
 
+def get_randomized_name_with_dash(prefix, name=None, initial="rg", random_int=None):
+    from random import randint
+    random_int = random_int if random_int else randint(0, 9999)
+    default = "{}-{}-{:04}".format(prefix, initial, random_int)
+    if name is not None:
+        return name
+    return default
 
 def generate_randomized_cert_name(thumbprint, prefix, initial="rg"):
     from random import randint
@@ -1441,10 +1451,184 @@ def set_managed_identity(cmd, resource_group_name, containerapp_def, system_assi
                 containerapp_def["identity"]["userAssignedIdentities"][r] = {}
 
 
-def _validate_custom_loc_and_location(cmd, custom_location):
-    from ._client_factory import customlocation_client_factory
-    parsed_custom_loc = parse_resource_id(custom_location)
+def _validate_custom_loc_and_location(cmd, custom_location=None, env=None, connected_cluster_id=None, env_rg=None):
+    from ._up_utils import list_connected_environments
+
+    if not is_valid_resource_id(custom_location):
+        raise ValidationError('{} is not a valid Azure resource ID.'.format(custom_location))
+
+    r = get_custom_location(cmd=cmd, custom_location_id=custom_location)
+    if r is None:
+        raise ResourceNotFoundError("Cannot find custom location with custom location ID {}".format(custom_location))
+
+    if connected_cluster_id:
+        if connected_cluster_id.lower() != r.host_resource_id.lower():
+            raise ValidationError('Custom location {} not in cluster {}.'.format(custom_location, connected_cluster_id))
+
+    # check env
+    if env:
+        env_list = [e for e in
+                    list_connected_environments(cmd=cmd, resource_group_name=env_rg, custom_location=custom_location) if
+                    (e["id"].lower() != env.lower() and e["name"] != env)]
+        if len(env_list) > 0:
+            raise ValidationError('The provided custom location already used by other environment. If you want to use this custom location, please specify associated environment with --environment. \n Otherwise, please use another custom location.')
+
+    # check extension type
+    check_extension_type = False
+    for extension_id in r.cluster_extension_ids:
+        extension = get_cluster_extension(cmd, extension_id)
+        if extension.extension_type.lower() == CONTAINER_APP_EXTENSION_TYPE:
+            check_extension_type = True
+            break
+    if not check_extension_type:
+        raise ValidationError('There is no Microsoft.App.Environment extension found associated with custom location {}'.format(custom_location))
+
+    return r.location
+
+
+def _validate_connected_k8s(cmd, connected_cluster_id=None):
+    if not is_valid_resource_id(connected_cluster_id):
+        raise ValidationError('{} is not a valid Azure resource ID.'.format(connected_cluster_id))
+    parsed_connected_cluster = parse_resource_id(connected_cluster_id)
+    cluster_type = parsed_connected_cluster.get("type")
+    if cluster_type != CONNECTED_CLUSTER_TYPE:
+        raise ValidationError('{} is not a connectedCluster resource ID.'.format(connected_cluster_id))
+    try:
+        connected_cluster = get_connected_k8s(cmd, connected_cluster_id=connected_cluster_id)
+    except:
+        raise ResourceNotFoundError("Cannot find connected cluster with connected cluster ID {}".format(connected_cluster_id))
+
+
+def get_custom_location(cmd, custom_location_id):
+    parsed_custom_loc = parse_resource_id(custom_location_id)
+    subscription_id = parsed_custom_loc.get("subscription")
     custom_loc_name = parsed_custom_loc["name"]
     custom_loc_rg = parsed_custom_loc["resource_group"]
-    r = customlocation_client_factory(cmd.cli_ctx).custom_locations.get(resource_group_name=custom_loc_rg, resource_name=custom_loc_name)
-    return r.location
+    custom_location = None
+    try:
+        custom_location = customlocation_client_factory(cmd.cli_ctx, subscription_id=subscription_id).get(resource_group_name=custom_loc_rg, resource_name=custom_loc_name)
+    except:
+        pass
+    return custom_location
+
+
+def list_custom_location(cmd, resource_group=None, connected_cluster_id=None):
+    if resource_group:
+        r = customlocation_client_factory(cmd.cli_ctx).list_by_resource_group(resource_group_name=resource_group)
+    else:
+        r = customlocation_client_factory(cmd.cli_ctx).list_by_subscription()
+
+    custom_location_list = []
+    for e in r:
+        if connected_cluster_id and e.host_resource_id.lower() != connected_cluster_id.lower():
+            continue
+        custom_location_list.append(e)
+
+    return custom_location_list
+
+
+def create_custom_location(cmd, custom_location_name=None, resource_group=None, connected_cluster_id=None,
+                           namespace='containerapp-ns', cluster_extension_id=None, location=None):
+    from azure.mgmt.extendedlocation import models
+
+    c = models.CustomLocation(name=custom_location_name, location=location,
+                              cluster_extension_ids=[cluster_extension_id], host_resource_id=connected_cluster_id,
+                              namespace=namespace, host_type=models.HostType.KUBERNETES)
+    poller = customlocation_client_factory(cmd.cli_ctx).begin_create_or_update(
+        resource_group_name=resource_group, resource_name=custom_location_name, parameters=c)
+    custom_location = LongRunningOperation(cmd.cli_ctx)(poller)
+    return custom_location
+
+
+def get_cluster_extension(cmd, cluster_extension_id=None):
+    parsed_extension = parse_resource_id(cluster_extension_id)
+    subscription_id = parsed_extension.get("subscription")
+    cluster_rg = parsed_extension.get("resource_group")
+    cluster_rp = parsed_extension.get("namespace")
+    cluster_type = parsed_extension.get("type")
+    cluster_name = parsed_extension.get("name")
+    resource_name = parsed_extension.get("resource_name")
+
+    return k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription_id).get(
+        resource_group_name=cluster_rg,
+        cluster_rp=cluster_rp,
+        cluster_resource_name=cluster_type,
+        cluster_name=cluster_name,
+        extension_name=resource_name)
+
+
+def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id=None):
+    parsed_extension = {}
+    if connected_cluster_id:
+        parsed_extension = parse_resource_id(connected_cluster_id)
+    elif cluster_extension_id:
+        parsed_extension = parse_resource_id(cluster_extension_id)
+
+    subscription_id = parsed_extension.get("subscription")
+    cluster_rg = parsed_extension.get("resource_group")
+    cluster_rp = parsed_extension.get("namespace")
+    cluster_type = parsed_extension.get("type")
+    cluster_name = parsed_extension.get("name")
+    extension_list = k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription_id).list(
+        resource_group_name=cluster_rg,
+        cluster_rp=cluster_rp,
+        cluster_resource_name=cluster_type,
+        cluster_name=cluster_name)
+    return extension_list
+
+
+def create_extension(cmd, extension_name='containerapps-ext', connected_cluster_id=None, namespace='containerapp-ns',
+                     connected_environment_name=None, logs_customer_id=None, logs_share_key=None, location=None,
+                     logs_rg=None):
+    from azure.mgmt.kubernetesconfiguration import models
+
+    if logs_customer_id is None or logs_share_key is None:
+        logs_customer_id, logs_share_key = _generate_log_analytics_if_not_provided(cmd, logs_customer_id,
+                                                                                   logs_share_key, location, logs_rg)
+
+    parsed_extension = parse_resource_id(connected_cluster_id)
+    subscription = parsed_extension.get("subscription")
+    cluster_rg = parsed_extension.get("resource_group")
+    cluster_rp = parsed_extension.get("namespace")
+    cluster_type = parsed_extension.get("type")
+    cluster_name = parsed_extension.get("name")
+
+    e = models.Extension()
+    e.extension_type = CONTAINER_APP_EXTENSION_TYPE
+    e.release_train = 'stable'
+    e.auto_upgrade_minor_version = True
+
+    e.scope = models.Scope(cluster=models.ScopeCluster(release_namespace=namespace))
+    e.release_namespace = namespace
+
+    e.configuration_settings = {
+        "Microsoft.CustomLocation.ServiceAccount": "default",
+        "appsNamespace": namespace,
+        "clusterName": connected_environment_name,
+        "logProcessor.appLogs.destination": "log-analytics"
+    }
+
+    b64_customer_id = b64encode(bytes(logs_customer_id, 'utf-8')).decode("utf-8")
+    b64_share_key = b64encode(bytes(logs_share_key, 'utf-8')).decode("utf-8")
+    e.configuration_protected_settings = {
+        "logProcessor.appLogs.logAnalyticsConfig.customerId": b64_customer_id,
+        "logProcessor.appLogs.logAnalyticsConfig.sharedKey": b64_share_key
+    }
+
+    poller = k8s_extension_client_factory(cmd.cli_ctx, subscription_id=subscription).begin_create(
+        resource_group_name=cluster_rg,
+        cluster_rp=cluster_rp,
+        cluster_resource_name=cluster_type,
+        cluster_name=cluster_name, extension_name=extension_name,
+        extension=e)
+    extension = LongRunningOperation(cmd.cli_ctx)(poller)
+    return extension
+
+
+def get_connected_k8s(cmd, connected_cluster_id=None):
+    parsed_connected_cluster = parse_resource_id(connected_cluster_id)
+    subscription = parsed_connected_cluster.get("subscription")
+    cluster_rg = parsed_connected_cluster.get("resource_group")
+    cluster_name = parsed_connected_cluster.get("name")
+    return connected_k8s_client_factory(cmd.cli_ctx, subscription_id=subscription).get(resource_group_name=cluster_rg,
+                                                                                       cluster_name=cluster_name)
