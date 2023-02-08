@@ -1137,9 +1137,13 @@ def list_environment_locations(cmd, resource_type):
 
 
 def check_env_name_on_rg(cmd, env, resource_group_name, location, custom_location_id, connected_cluster_id):
-    env_dict = parse_resource_id(env)
-    env_name = env_dict.get("name")
-    resource_type = env_dict.get("resource_type")
+    env_name = env
+    resource_type = None
+    if is_valid_resource_id(env):
+        env_dict = parse_resource_id(env)
+        env_name = env_dict.get("name")
+        resource_group_name = env_dict.get("resource_group")
+        resource_type = env_dict.get("resource_type")
     if resource_type is None:
         if custom_location_id or connected_cluster_id:
             resource_type = CONNECTED_ENVIRONMENT_TYPE
