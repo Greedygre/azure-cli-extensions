@@ -369,9 +369,9 @@ class ContainerAppEnvironment(Resource):
             )  # TODO use .info()
 
     def create(self):
-        self.location = validate_environment_location(self.cmd, self.location)
+        self.location = validate_environment_location(self.cmd, self.location, self.resource_type)
         register_provider_if_needed(self.cmd, LOG_ANALYTICS_RP)
-        if self.is_connected_environment_type():
+        if self.custom_location_id:
             env = create_connected_environment(
                 self.cmd,
                 self.name,
@@ -659,7 +659,7 @@ def _validate_up_args(cmd, source, image, repo, registry_server, env, resource_g
         register_provider_if_needed(cmd, CUSTOM_LOCATION_RP)
         register_provider_if_needed(cmd, KUBERNETES_CONFIGURATION_RP)
         if location:
-            _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "connectedEnvironments")
+            _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, CONNECTED_ENVIRONMENT_TYPE)
         if custom_location_id:
             _validate_custom_loc_and_location(cmd, custom_location_id, env, connected_cluster_id, resource_group_name)
         if connected_cluster_id:
@@ -768,14 +768,12 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
         extension: "Extension"
 ):
     #  if connected cluster have one custom location (with ext namespace) bind to the container app ext, then use it.
-    if env.custom_location_id is None and custom_location.connected_cluster_id is None:
-        raise ValidationError(
-            "please specify one of connected-cluster-id or custom location you want to create the Connected environment.")
+    if env.custom_location_id is None:
+        if custom_location.connected_cluster_id is None:
+            raise ValidationError("please specify one of connected-cluster-id or custom location you want to create the Connected environment.")
 
-    if custom_location.connected_cluster_id and env.custom_location_id is None:
         connected_cluster = get_connected_k8s(cmd, custom_location.connected_cluster_id)
         custom_location.location = connected_cluster.location
-
         extension_list = list_cluster_extensions(cmd, connected_cluster_id=custom_location.connected_cluster_id)
         for e in extension_list:
             if e.extension_type.lower() == CONTAINER_APP_EXTENSION_TYPE:
@@ -942,7 +940,7 @@ def _set_up_defaults(
         )
 
     env_list = []
-    # try to set RG name by env name
+    # Try to set RG name by env name
     # If two environments are found, one manager/one connected, use managed env.
     # If the unique environment is found, create container apps under it.
     if not env.is_connected_environment_type() and env.name and not resource_group.name:
@@ -959,6 +957,7 @@ def _set_up_defaults(
                 "Please specify which resource group your Containerapp environment is in."
             )    # get ACR details from --image, if possible
 
+    # Try to get existed connected environment
     if not env.resource_type or (env.is_connected_environment_type() and (not env.name or not resource_group.name or not env.custom_location_id)):
         connected_env_list = list_connected_environments(cmd=cmd, resource_group_name=resource_group_name)
         for e in connected_env_list:
@@ -988,16 +987,19 @@ def _set_up_defaults(
                 resource_group.name = parse_resource_id(env_list[0]["id"])["resource_group"]
                 env.set_name(env_list[0]["id"])
                 env.custom_location_id = env_list[0]["extendedLocation"]["name"]
-
+    # Try to get existed custom location and extension
+    # Set up default values for not existed resources(env, custom location, extension)
     if env.is_connected_environment_type():
         _get_custom_location_and_extension_id_and_location_from_cluster(cmd, env=env, custom_location=custom_location, extension=extension)
         random_int = randint(0, 9999)
         resource_group.name = get_randomized_name(get_profile_username(), name=resource_group.name, random_int=random_int)
         env.name = env.name if env.name else "{}-env".format(name).replace("_", "-")
+        # If not existed custom location, set up values for creating
         if env.custom_location_id is None:
             custom_location.name = get_randomized_name_with_dash(prefix=get_profile_username(), name=custom_location.name, initial="env-location", random_int=random_int)
             custom_location.resource_group_name = resource_group.name
             env.custom_location_id = custom_location.get_rid()
+            # If not existed extension, set up values for creating
             if extension.name is None:
                 extension.name = 'containerapps-ext'
                 extension.namespace = "containerapp-ns"
@@ -1102,51 +1104,28 @@ def find_existing_acr(cmd, app: "ContainerApp"):
     return None, None
 
 
-def validate_environment_location(cmd, location):
-    from ._constants import MAX_ENV_PER_LOCATION
-    env_list = list_managed_environments(cmd)
-
-    locations = [loc["location"] for loc in env_list]
-    locations = list(set(locations))  # remove duplicates
-
-    location_count = {}
-    for loc in locations:
-        location_count[loc] = len([e for e in env_list if e["location"] == loc])
-
-    disallowed_locations = []
-    for _, value in enumerate(location_count):
-        if location_count[value] > MAX_ENV_PER_LOCATION - 1:
-            disallowed_locations.append(value)
-
-    res_locations = list_environment_locations(cmd)
-    res_locations = [loc for loc in res_locations if loc not in disallowed_locations]
+def validate_environment_location(cmd, location, resource_type):
+    res_locations = list_environment_locations(cmd, resource_type)
 
     allowed_locs = ", ".join(res_locations)
 
     if location:
         try:
-            _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, "managedEnvironments")
+            _ensure_location_allowed(cmd, location, CONTAINER_APPS_RP, resource_type)
+
+            return location
         except Exception as e:  # pylint: disable=broad-except
             raise ValidationError("You cannot create a Containerapp environment in location {}. List of eligible locations: {}.".format(location, allowed_locs)) from e
-
-    if len(res_locations) > 0:
-        if not location:
-            logger.warning("Creating environment on location {}.".format(res_locations[0]))
-            return res_locations[0]
-        if location in disallowed_locations:
-            raise ValidationError("You have more than {} environments in location {}. List of eligible locations: {}.".format(MAX_ENV_PER_LOCATION, location, allowed_locs))
-        return location
     else:
-        raise ValidationError("You cannot create any more environments. Environments are limited to {} per location in a subscription. Please specify an existing environment using --environment.".format(MAX_ENV_PER_LOCATION))
+        return res_locations[0]
 
-
-def list_environment_locations(cmd):
+def list_environment_locations(cmd, resource_type):
     from ._utils import providers_client_factory
     providers_client = providers_client_factory(cmd.cli_ctx, get_subscription_id(cmd.cli_ctx))
     resource_types = getattr(providers_client.get(CONTAINER_APPS_RP), 'resource_types', [])
     res_locations = []
     for res in resource_types:
-        if res and getattr(res, 'resource_type', "") == "managedEnvironments":
+        if res and getattr(res, 'resource_type', "") == resource_type:
             res_locations = getattr(res, 'locations', [])
 
     res_locations = [res_loc.lower().replace(" ", "").replace("(", "").replace(")", "") for res_loc in res_locations if res_loc.strip()]
