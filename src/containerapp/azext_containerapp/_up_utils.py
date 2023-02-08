@@ -763,12 +763,11 @@ def _get_env_and_group_from_log_analytics(
 
 def _get_custom_location_and_extension_id_and_location_from_cluster(
         cmd,
-        env: "ContainerAppEnvironment",
         custom_location: "CustomLocation",
         extension: "Extension"
 ):
     #  if connected cluster have one custom location (with ext namespace) bind to the container app ext, then use it.
-    if env.custom_location_id is None:
+    if custom_location.name is None:
         if custom_location.connected_cluster_id is None:
             raise ValidationError("please specify one of connected-cluster-id or custom location you want to create the Connected environment.")
 
@@ -786,7 +785,6 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
                                                             connected_cluster_id=custom_location.connected_cluster_id)
                 for c in custom_location_list:
                     if e.id in c.cluster_extension_ids and e.scope.cluster.release_namespace == c.namespace:
-                        env.custom_location_id = c.id
                         custom_location.namespace = c.namespace
                         custom_location.set_name(c.id)
                         custom_location.location = c.location
@@ -942,7 +940,7 @@ def _set_up_defaults(
     env_list = []
     # Try to set RG name by env name
     # If two environments are found, one manager/one connected, use managed env.
-    # If the unique environment is found, create container apps under it.
+    # If the unique environment is found, use it.
     if not env.is_connected_environment_type() and env.name and not resource_group.name:
         if not location:
             env_list = [e for e in list_managed_environments(cmd=cmd) if e["name"] == env.name]
@@ -958,6 +956,9 @@ def _set_up_defaults(
             )    # get ACR details from --image, if possible
 
     # Try to get existed connected environment
+    # 'not env.resource_type' if for command: -n <app_name> --environment <env_name>:
+    # 1. Find managed env with env name, if found, use it.
+    # 2. If not found manged env, the env.resource_type is None, find connected env with env name, if found, use it.
     if not env.resource_type or (env.is_connected_environment_type() and (not env.name or not resource_group.name or not env.custom_location_id)):
         connected_env_list = list_connected_environments(cmd=cmd, resource_group_name=resource_group_name)
         for e in connected_env_list:
@@ -990,23 +991,25 @@ def _set_up_defaults(
     # Try to get existed custom location and extension
     # Set up default values for not existed resources(env, custom location, extension)
     if env.is_connected_environment_type():
-        _get_custom_location_and_extension_id_and_location_from_cluster(cmd, env=env, custom_location=custom_location, extension=extension)
-        random_int = randint(0, 9999)
-        resource_group.name = get_randomized_name(get_profile_username(), name=resource_group.name, random_int=random_int)
-        env.name = env.name if env.name else "{}-env".format(name).replace("_", "-")
-        # If not existed custom location, set up values for creating
-        if env.custom_location_id is None:
-            custom_location.name = get_randomized_name_with_dash(prefix=get_profile_username(), name=custom_location.name, initial="env-location", random_int=random_int)
-            custom_location.resource_group_name = resource_group.name
-            env.custom_location_id = custom_location.get_rid()
-            # If not existed extension, set up values for creating
-            if extension.name is None:
-                extension.name = 'containerapps-ext'
-                extension.namespace = "containerapp-ns"
-                extension.logs_rg = resource_group.name
-                extension.logs_location = resource_group.location
-                extension.connected_environment_name = env.name
-                custom_location.cluster_extension_id = extension.get_rid()
+        if not env.check_exists():
+            _get_custom_location_and_extension_id_and_location_from_cluster(cmd, custom_location=custom_location, extension=extension)
+            if custom_location.exists:
+                env.custom_location_id = custom_location.get_rid()
+            else:
+                random_int = randint(0, 9999)
+                resource_group.name = get_randomized_name(get_profile_username(), name=resource_group.name, random_int=random_int)
+                env.name = env.name if env.name else "{}-env".format(name).replace("_", "-")
+                custom_location.name = get_randomized_name_with_dash(prefix=get_profile_username(), name=custom_location.name, initial="env-location", random_int=random_int)
+                custom_location.resource_group_name = resource_group.name
+                env.custom_location_id = custom_location.get_rid()
+                # If not existed extension, set up values for creating
+                if not extension.exists:
+                    extension.name = 'containerapps-ext'
+                    extension.namespace = "containerapp-ns"
+                    extension.logs_rg = resource_group.name
+                    extension.logs_location = resource_group.location
+                    extension.connected_environment_name = env.name
+                    custom_location.cluster_extension_id = extension.get_rid()
 
     _get_acr_from_image(cmd, app)
 
