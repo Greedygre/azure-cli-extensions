@@ -2551,7 +2551,7 @@ def containerapp_up(cmd,
     up_output(app)
 
 
-def containerapp_up_logic(cmd, resource_group_name, name, env, image, env_vars, ingress, target_port, registry_server, registry_user, registry_pass, is_connected_environment_type,):
+def containerapp_up_logic(cmd, resource_group_name, name, env, image, env_vars, ingress, target_port, registry_server, registry_user, registry_pass, is_connected_environment_type):
     containerapp_def = None
     try:
         containerapp_def = ContainerAppClient.show(cmd=cmd, resource_group_name=resource_group_name, name=name)

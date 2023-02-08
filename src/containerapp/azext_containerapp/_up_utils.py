@@ -793,8 +793,6 @@ def _get_custom_location_and_extension_id_and_location_from_cluster(
                 break
 
 
-
-
 def _get_acr_from_image(cmd, app):
     if app.image is not None and "azurecr.io" in app.image:
         app.registry_server = app.image.split("/")[
