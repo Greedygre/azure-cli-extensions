@@ -1006,6 +1006,7 @@ def _set_up_defaults(
                     extension.logs_rg = resource_group.name
                     extension.logs_location = resource_group.location
                     extension.connected_environment_name = env.name
+                    custom_location.namespace = "containerapp-ns"
                     custom_location.cluster_extension_id = extension.get_rid()
 
     _get_acr_from_image(cmd, app)
