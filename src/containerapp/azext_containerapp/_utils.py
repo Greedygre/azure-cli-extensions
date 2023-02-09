@@ -1578,8 +1578,7 @@ def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id
 
 
 def create_extension(cmd, extension_name='containerapps-ext', connected_cluster_id=None, namespace='containerapp-ns',
-                     connected_environment_name=None, logs_customer_id=None, logs_share_key=None, location=None,
-                     logs_rg=None):
+                     logs_customer_id=None, logs_share_key=None, location=None, logs_rg=None):
     from azure.mgmt.kubernetesconfiguration import models
 
     if logs_customer_id is None or logs_share_key is None:
@@ -1604,7 +1603,6 @@ def create_extension(cmd, extension_name='containerapps-ext', connected_cluster_
     e.configuration_settings = {
         "Microsoft.CustomLocation.ServiceAccount": "default",
         "appsNamespace": namespace,
-        "clusterName": connected_environment_name,
         "logProcessor.appLogs.destination": "log-analytics"
     }
 
