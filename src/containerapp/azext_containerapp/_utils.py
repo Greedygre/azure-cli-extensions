@@ -1593,6 +1593,7 @@ def create_extension(cmd, extension_name='containerapps-ext', connected_cluster_
     cluster_name = parsed_extension.get("name")
 
     e = models.Extension()
+    e.identity = models.Identity(type="SystemAssigned")
     e.extension_type = CONTAINER_APP_EXTENSION_TYPE
     e.release_train = 'stable'
     e.auto_upgrade_minor_version = True
@@ -1603,6 +1604,7 @@ def create_extension(cmd, extension_name='containerapps-ext', connected_cluster_
     e.configuration_settings = {
         "Microsoft.CustomLocation.ServiceAccount": "default",
         "appsNamespace": namespace,
+        "clusterName": extension_name,
         "logProcessor.appLogs.destination": "log-analytics"
     }
 

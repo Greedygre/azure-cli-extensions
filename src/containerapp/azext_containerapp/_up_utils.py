@@ -696,7 +696,7 @@ def _get_dockerfile_content(repo, branch, token, source, context_path, dockerfil
 
 
 def _get_app_env_and_group(
-    cmd, name, resource_group: "ResourceGroup", env: "ContainerAppEnvironment", location
+    cmd, name, resource_group: "ResourceGroup", env: "ContainerAppEnvironment", location, custom_location: "CustomLocation"
 ):
     if not resource_group.name and not resource_group.exists:
         matched_apps = [c for c in list_containerapp(cmd) if c["name"].lower() == name.lower()]
@@ -706,6 +706,8 @@ def _get_app_env_and_group(
             matched_apps = [c for c in matched_apps if (c.get("extendedLocation") and c["extendedLocation"]["name"].lower() == env.custom_location_id.lower())]
         elif env.resource_type:
             matched_apps = [c for c in matched_apps if parse_resource_id(c["properties"]["environmentId"])["resource_type"].lower() == env.resource_type.lower()]
+        if custom_location.connected_cluster_id:
+            matched_apps = _filter_containerapps_by_connected_cluster_id(cmd, matched_apps, custom_location.connected_cluster_id)
         if location:
             matched_apps = [c for c in matched_apps if format_location(c["location"]) == format_location(location)]
         if len(matched_apps) == 1:
@@ -720,6 +722,15 @@ def _get_app_env_and_group(
                 f"There are multiple containerapps with name {name} on the subscription. "
                 "Please specify which resource group your Containerapp is in."
             )
+
+
+def _filter_containerapps_by_connected_cluster_id(cmd, matched_apps, connected_cluster_id):
+    result_apps = []
+    for app in matched_apps:
+        custom_location_from_app = get_custom_location(cmd=cmd, custom_location_id=app["extendedLocation"]["name"])
+        if custom_location_from_app and connected_cluster_id.lower() == custom_location_from_app.host_resource_id.lower():
+            result_apps.append(app)
+    return result_apps
 
 
 def _get_env_and_group_from_log_analytics(
@@ -926,7 +937,7 @@ def _set_up_defaults(
     extension: "Extension"
 ):
     # If no RG passed in and a singular app exists with the same name, get its env and rg
-    _get_app_env_and_group(cmd, name, resource_group, env, location)
+    _get_app_env_and_group(cmd, name, resource_group, env, location, custom_location)
 
     # If no env passed in (and not creating a new RG), then try getting an env by location / log analytics ID
     if not env.is_connected_environment_type():

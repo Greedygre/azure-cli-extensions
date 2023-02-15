@@ -32,3 +32,26 @@ class ContainerAppUpImageTest(ScenarioTest):
         url = url if url.startswith("http") else f"http://{url}"
         resp = requests.get(url)
         self.assertTrue(resp.ok)
+
+
+    def test_containerapp_up_on_arc_image_e2e(self):
+        self.kwargs.update({
+            'name': 'mycontainerapp',
+            'rg': 'quickup10',
+            'cluster_name': 'quickup10-cluster',
+            'cluster_type': 'connectedClusters',
+            'connected_cluster_id': '/subscriptions/23f95f0e-e782-47be-9f97-56035ec10e42/resourceGroups/quickup10/providers/Microsoft.Kubernetes/connectedClusters/quickup10-cluster',
+            'image': 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+        })
+
+        self.cmd('containerapp up -n {name} --connected-cluster-id {connected_cluster_id} --image {image}')
+
+        extension_type = 'microsoft.app.environment'
+        installed_exts = self.cmd(
+            'k8s-extension list -c {cluster_name} -g {rg} --cluster-type {cluster_type}').get_output_in_json()
+        found_extension = False
+        for item in installed_exts:
+            if item['extensionType'] == extension_type:
+                found_extension = True
+                break
+        self.assertTrue(found_extension)
