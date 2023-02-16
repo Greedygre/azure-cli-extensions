@@ -1577,8 +1577,7 @@ def list_cluster_extensions(cmd, cluster_extension_id=None, connected_cluster_id
     return extension_list
 
 
-def create_extension(cmd, extension_name='containerapps-ext', connected_cluster_id=None, namespace='containerapp-ns',
-                     logs_customer_id=None, logs_share_key=None, location=None, logs_rg=None):
+def create_extension(cmd, extension_name, connected_cluster_id=None, namespace=None, logs_customer_id=None, logs_share_key=None, location=None, logs_rg=None):
     from azure.mgmt.kubernetesconfiguration import models
 
     if logs_customer_id is None or logs_share_key is None:
@@ -1599,7 +1598,6 @@ def create_extension(cmd, extension_name='containerapps-ext', connected_cluster_
     e.auto_upgrade_minor_version = True
 
     e.scope = models.Scope(cluster=models.ScopeCluster(release_namespace=namespace))
-    e.release_namespace = namespace
 
     e.configuration_settings = {
         "Microsoft.CustomLocation.ServiceAccount": "default",

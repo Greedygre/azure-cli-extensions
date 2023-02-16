@@ -34,16 +34,24 @@ class ContainerAppUpImageTest(ScenarioTest):
         self.assertTrue(resp.ok)
 
 
-    def test_containerapp_up_on_arc_image_e2e(self):
+    @ResourceGroupPreparer(location="eastus2")
+    def test_containerapp_up_on_arc_image_e2e(self, resource_group):
+        aks_name = "my-aks-cluster"
+        connected_cluster_name = "my-connected-cluster"
+        self.cmd(f'az aks create --resource-group {resource_group} --name {aks_name} --enable-aad --generate-ssh-keys')
+        self.cmd(f'az aks get-credentials --resource-group {resource_group} --name {aks_name} --admin')
+        self.cmd(f'az connectedk8s connect --resource-group {resource_group} --name {connected_cluster_name}')
+        connected_cluster = self.cmd(f'az connectedk8s show --resource-group {resource_group} --name {connected_cluster_name}').get_output_in_json()
+        connected_cluster_id = connected_cluster['id']
         self.kwargs.update({
             'name': 'mycontainerapp',
-            'rg': 'quickup10',
-            'cluster_name': 'quickup10-cluster',
+            'rg': 'my-containerapp-rg',
+            'connected_cluster_id': connected_cluster_id,
+            'cluster_name': 'my-connected-cluster',
+            'cluster_rg': 'my-connected-cluster-rg',
             'cluster_type': 'connectedClusters',
-            'connected_cluster_id': '/subscriptions/23f95f0e-e782-47be-9f97-56035ec10e42/resourceGroups/quickup10/providers/Microsoft.Kubernetes/connectedClusters/quickup10-cluster',
             'image': 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
         })
-
         self.cmd('containerapp up -n {name} --connected-cluster-id {connected_cluster_id} --image {image}')
 
         extension_type = 'microsoft.app.environment'

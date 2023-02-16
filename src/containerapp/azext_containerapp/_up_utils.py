@@ -178,6 +178,7 @@ class Extension(Resource):
         extension = create_extension(cmd=self.cmd,
                                      extension_name=self.name,
                                      connected_cluster_id=self.connected_cluster_id,
+                                     namespace=self.namespace,
                                      logs_customer_id=self.logs_customer_id,
                                      logs_share_key=self.logs_share_key,
                                      location=self.logs_location,
@@ -1012,12 +1013,12 @@ def _set_up_defaults(
                 env.custom_location_id = custom_location.get_rid()
                 # If not existed extension, set up values for creating
                 if not extension.exists:
-                    extension.name = 'containerapps-ext'
-                    extension.namespace = "containerapp-ns"
+                    extension.name = 'containerapp-ext'
+                    extension.namespace = 'containerapp-ns'
                     extension.logs_rg = resource_group.name
                     extension.logs_location = resource_group.location
                     extension.connected_environment_name = env.name
-                    custom_location.namespace = "containerapp-ns"
+                    custom_location.namespace = 'containerapp-ns'
                     custom_location.cluster_extension_id = extension.get_rid()
 
     _get_acr_from_image(cmd, app)
