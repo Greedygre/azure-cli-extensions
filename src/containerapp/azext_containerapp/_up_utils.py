@@ -969,7 +969,10 @@ def _set_up_defaults(
     # 1. Find managed env with env name, if found, use it.
     # 2. If not found manged env, the env.resource_type is None, find connected env with env name, if found, use it.
     if not env.resource_type or (env.is_connected_environment_type() and (not env.name or not resource_group.name or not env.custom_location_id)):
-        connected_env_list = list_connected_environments(cmd=cmd, resource_group_name=resource_group_name)
+        connected_env_list = []
+        if resource_group.exists or not resource_group.name:
+            connected_env_list = list_connected_environments(cmd=cmd, resource_group_name=resource_group.name)
+
         for e in connected_env_list:
             if env.name and env.name != e["name"]:
                 continue
