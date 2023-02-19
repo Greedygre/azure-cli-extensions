@@ -728,9 +728,10 @@ def _get_app_env_and_group(
 def _filter_containerapps_by_connected_cluster_id(cmd, matched_apps, connected_cluster_id):
     result_apps = []
     for app in matched_apps:
-        custom_location_from_app = get_custom_location(cmd=cmd, custom_location_id=app["extendedLocation"]["name"])
-        if custom_location_from_app and connected_cluster_id.lower() == custom_location_from_app.host_resource_id.lower():
-            result_apps.append(app)
+        if app.get("extendedLocation"):
+            custom_location_from_app = get_custom_location(cmd=cmd, custom_location_id=app["extendedLocation"]["name"])
+            if custom_location_from_app and connected_cluster_id.lower() == custom_location_from_app.host_resource_id.lower():
+                result_apps.append(app)
     return result_apps
 
 
