@@ -44,10 +44,10 @@ class ContainerAppUpImageTest(ScenarioTest):
         connected_cluster = self.cmd(f'az connectedk8s show --resource-group {resource_group} --name {connected_cluster_name}').get_output_in_json()
         connected_cluster_id = connected_cluster['id']
         app_name = 'mycontainerapp'
-        app_rg = 'my-containerapp-rg'
         image = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
-        self.cmd(f'containerapp up -n {app_name} -g {app_rg} --connected-cluster-id {connected_cluster_id} --image {image}')
+        # --connected-cluster-id
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --connected-cluster-id {connected_cluster_id} --image {image}')
 
         extension_type = 'microsoft.app.environment'
         installed_exts = self.cmd(f'k8s-extension list -c {connected_cluster_name} -g {resource_group} --cluster-type connectedClusters').get_output_in_json()
@@ -57,4 +57,23 @@ class ContainerAppUpImageTest(ScenarioTest):
                 found_extension = True
                 break
         self.assertTrue(found_extension)
+
+        # --custom-location
+        custom_location_list = self.cmd('customlocation list').get_output_in_json()
+        custom_location_id = None
+        for custom_location in custom_location_list:
+            if custom_location["hostResourceId"] == connected_cluster_id:
+                custom_location_id = custom_location["id"]
+                break
+        self.assertIsNotNone(custom_location_id)
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --custom-location {custom_location_id} --image {image}')
+
+        # --environment {env_name}
+        # --environment {env_id}
+        env_list = self.cmd(f'containerapp connected-env list -g {resource_group}').get_output_in_json()
+        env_id = env_list[0]["id"]
+        env_name = env_list[0]["name"]
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --environment {env_id} --image {image}')
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --environment {env_name} --image {image}')
+
         self.cmd(f'group delete --name {app_rg} --yes --no-wait')
