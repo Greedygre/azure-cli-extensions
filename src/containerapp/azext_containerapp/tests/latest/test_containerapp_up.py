@@ -38,7 +38,7 @@ class ContainerAppUpImageTest(ScenarioTest):
     def test_containerapp_up_on_arc_image_e2e(self, resource_group):
         aks_name = "my-aks-cluster"
         connected_cluster_name = "my-connected-cluster"
-        self.cmd(f'aks create --resource-group {resource_group} --name {aks_name} --enable-aad --generate-ssh-keys')
+        self.cmd(f'aks create --resource-group {resource_group} --name {aks_name} --enable-aad --generate-ssh-keys --enable-cluster-autoscaler --min-count 4 --max-count 10 --node-count 4')
         self.cmd(f'aks get-credentials --resource-group {resource_group} --name {aks_name} --overwrite-existing --admin')
         self.cmd(f'connectedk8s connect --resource-group {resource_group} --name {connected_cluster_name}')
         connected_cluster = self.cmd(f'az connectedk8s show --resource-group {resource_group} --name {connected_cluster_name}').get_output_in_json()
@@ -46,8 +46,8 @@ class ContainerAppUpImageTest(ScenarioTest):
         app_name = 'mycontainerapp'
         image = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
-        # --connected-cluster-id
-        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --connected-cluster-id {connected_cluster_id} --image {image}')
+        # -n {appname} --connected-cluster-id
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --connected-cluster-id {connected_cluster_id} --image {image} -l eastus')
 
         extension_type = 'microsoft.app.environment'
         installed_exts = self.cmd(f'k8s-extension list -c {connected_cluster_name} -g {resource_group} --cluster-type connectedClusters').get_output_in_json()
@@ -57,8 +57,33 @@ class ContainerAppUpImageTest(ScenarioTest):
                 found_extension = True
                 break
         self.assertTrue(found_extension)
+        self._validate_app(resource_group, app_name)
 
-        # --custom-location
+        # -n {appname}
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --image {image}')
+        self.cmd(f"containerapp show -g {resource_group} -n {app_name}").get_output_in_json()
+        self._validate_app(resource_group, app_name)
+
+        # -n {appname} --environment {env_name}
+        env_list = self.cmd(f'containerapp connected-env list -g {resource_group}').get_output_in_json()
+        env_id = env_list[0]["id"]
+        env_name = env_list[0]["name"]
+        app_name = 'mycontainerapp2'
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --environment {env_id} --image {image}')
+        self._validate_app(resource_group, app_name)
+
+        # -n {appname} --environment {env_id}
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --environment {env_name} --image {image}')
+        self._validate_app(resource_group, app_name)
+
+        # -n {appname} --connected-cluster-id --environment {env_name}
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --connected-cluster-id {connected_cluster_id} --environment {env_id} --image {image}')
+        self._validate_app(resource_group, app_name)
+
+        # -n {appname} --connected-cluster-id --environment {env_id}
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --connected-cluster-id {connected_cluster_id} --environment {env_name} --image {image}')
+        self._validate_app(resource_group, app_name)
+
         custom_location_list = self.cmd('customlocation list').get_output_in_json()
         custom_location_id = None
         for custom_location in custom_location_list:
@@ -66,14 +91,23 @@ class ContainerAppUpImageTest(ScenarioTest):
                 custom_location_id = custom_location["id"]
                 break
         self.assertIsNotNone(custom_location_id)
+
+        # -n {appname} --custom-location
+        app_name = 'mycontainerapp3'
         self.cmd(f'containerapp up -n {app_name} -g {resource_group} --custom-location {custom_location_id} --image {image}')
+        self._validate_app(resource_group, app_name)
 
-        # --environment {env_name}
-        # --environment {env_id}
-        env_list = self.cmd(f'containerapp connected-env list -g {resource_group}').get_output_in_json()
-        env_id = env_list[0]["id"]
-        env_name = env_list[0]["name"]
-        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --environment {env_id} --image {image}')
-        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --environment {env_name} --image {image}')
+        # -n {appname} --custom-location --environment {env_name}
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --custom-location {custom_location_id} --environment {env_id} --image {image}')
+        self._validate_app(resource_group, app_name)
 
-        self.cmd(f'group delete --name {app_rg} --yes --no-wait')
+        # -n {appname} --custom-location --environment {env_id}
+        self.cmd(f'containerapp up -n {app_name} -g {resource_group} --custom-location {custom_location_id} --environment {env_name} --image {image}')
+        self._validate_app(resource_group, app_name)
+
+    def _validate_app(self, resource_group, app_name):
+        app = self.cmd(f"containerapp show -g {resource_group} -n {app_name}").get_output_in_json()
+        url = app["properties"]["configuration"]["ingress"]["fqdn"]
+        url = url if url.startswith("http") else f"http://{url}"
+        resp = requests.get(url)
+        self.assertTrue(resp.ok)

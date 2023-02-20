@@ -39,7 +39,7 @@ CLASSIFIERS = [
 # TODO: Add any additional SDK dependencies here
 DEPENDENCIES = [
     'azure-cli-core',
-    'azure-mgmt-kubernetesconfiguration==3.0.0b1',
+    'azure-mgmt-kubernetesconfiguration==2.0.0',
     'azure-mgmt-hybridkubernetes==1.1.0'
 ]
 
