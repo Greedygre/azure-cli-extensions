@@ -57,3 +57,4 @@ class ContainerAppUpImageTest(ScenarioTest):
                 found_extension = True
                 break
         self.assertTrue(found_extension)
+        self.cmd(f'group delete --name {app_rg} --yes --no-wait')
