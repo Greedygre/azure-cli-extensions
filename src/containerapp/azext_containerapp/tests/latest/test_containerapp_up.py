@@ -54,6 +54,7 @@ class ContainerAppUpImageTest(ScenarioTest):
         found_extension = False
         for item in installed_exts:
             if item['extensionType'] == extension_type:
+                self.assertEqual(item["provisioningState"], "Succeeded")
                 found_extension = True
                 break
         self.assertTrue(found_extension)
@@ -88,6 +89,7 @@ class ContainerAppUpImageTest(ScenarioTest):
         custom_location_id = None
         for custom_location in custom_location_list:
             if custom_location["hostResourceId"] == connected_cluster_id:
+                self.assertEqual(custom_location["provisioningState"], "Succeeded")
                 custom_location_id = custom_location["id"]
                 break
         self.assertIsNotNone(custom_location_id)
