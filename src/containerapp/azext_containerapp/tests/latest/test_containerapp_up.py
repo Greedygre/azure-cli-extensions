@@ -75,7 +75,6 @@ class ContainerAppUpImageTest(ScenarioTest):
 
         # -n {appname}
         self.cmd(f'containerapp up -n {app_name} -g {resource_group} --image {image}')
-        self.cmd(f"containerapp show -g {resource_group} -n {app_name}").get_output_in_json()
         self._validate_app(resource_group, app_name, custom_location_id, env_id)
 
         # -n {appname} --environment {env_name}
