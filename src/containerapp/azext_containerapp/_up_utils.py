@@ -1008,8 +1008,9 @@ def _set_up_defaults(
             _get_custom_location_and_extension_id_and_location_from_cluster(cmd, custom_location=custom_location, extension=extension)
             if custom_location.exists:
                 env.custom_location_id = custom_location.get_rid()
-                if env.location is None:
+                if location is None:
                     env.location = custom_location.location
+                    resource_group.location = custom_location.location
             else:
                 random_int = randint(0, 9999)
                 resource_group.name = get_randomized_name(get_profile_username(), name=resource_group.name, random_int=random_int)
@@ -1017,8 +1018,9 @@ def _set_up_defaults(
                 custom_location.name = get_randomized_name_with_dash(prefix=get_profile_username(), name=custom_location.name, initial="env-location", random_int=random_int)
                 custom_location.resource_group_name = resource_group.name
                 env.custom_location_id = custom_location.get_rid()
-                if env.location is None:
+                if location is None:
                     env.location = custom_location.location
+                    resource_group.location = custom_location.location
                 # If not existed extension, set up values for creating
                 if not extension.exists:
                     extension.name = 'containerapp-ext'
