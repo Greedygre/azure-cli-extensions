@@ -1009,6 +1009,8 @@ def _set_up_defaults(
             if custom_location.exists:
                 env.custom_location_id = custom_location.get_rid()
                 if location is None:
+                    if custom_location.location is None:
+                        custom_location.location = get_custom_location(cmd, custom_location_id=custom_location.get_rid()).location
                     env.location = custom_location.location
                     resource_group.location = custom_location.location
             else:
