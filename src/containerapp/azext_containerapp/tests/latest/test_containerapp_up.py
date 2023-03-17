@@ -68,7 +68,7 @@ class ContainerAppUpImageTest(ScenarioTest):
         self.assertIsNotNone(custom_location_id)
         env_list = self.cmd(f'containerapp connected-env list -g {resource_group}').get_output_in_json()
         self.assertEqual(env_list[0]["extendedLocation"]["name"].lower(), custom_location_id.lower())
-        self.assertEqual(env_list[0]["location"], "eastus")
+        self.assertEqual(env_list[0]["location"], connected_cluster["location"])
         env_id = env_list[0]["id"]
         env_name = env_list[0]["name"]
 
