@@ -412,6 +412,7 @@ class ContainerappDaprTests(ScenarioTest):
             containerapp_env = self.cmd('containerapp env show -g {} -n {}'.format(resource_group, env_name)).get_output_in_json()
 
         self.cmd('containerapp create -g {} -n {} --environment {}'.format(resource_group, ca_name, env_name), checks=[
+            JMESPathCheck('properties.provisioningState', "Succeeded"),
             JMESPathCheck('properties.configuration.ingress', None),
         ])
 
