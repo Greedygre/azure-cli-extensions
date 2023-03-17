@@ -411,7 +411,9 @@ class ContainerappDaprTests(ScenarioTest):
             time.sleep(5)
             containerapp_env = self.cmd('containerapp env show -g {} -n {}'.format(resource_group, env_name)).get_output_in_json()
 
-        self.cmd('containerapp create -g {} -n {} --environment {}'.format(resource_group, ca_name, env_name))
+        self.cmd('containerapp create -g {} -n {} --environment {}'.format(resource_group, ca_name, env_name), checks=[
+            JMESPathCheck('properties.configuration.ingress', None),
+        ])
 
         self.cmd('containerapp dapr enable -g {} -n {} --dapr-app-id containerapp1 --dapr-app-port 80 --dapr-app-protocol http'.format(resource_group, ca_name, env_name), checks=[
             JMESPathCheck('appId', "containerapp1"),
