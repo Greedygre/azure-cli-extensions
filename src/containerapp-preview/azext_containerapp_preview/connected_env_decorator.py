@@ -7,107 +7,22 @@ from typing import Any, Dict
 
 from azure.cli.core.azclierror import ResourceNotFoundError, ValidationError
 from azure.cli.core.commands import AzCliCommand
-from azure.cli.core.commands.client_factory import get_subscription_id
-from knack.util import CLIError
 from msrestazure.tools import is_valid_resource_id
 
-from ._client_factory import handle_raw_exception, providers_client_factory
+from ._client_factory import handle_raw_exception
 from ._constants import CONTAINER_APP_EXTENSION_TYPE, CONNECTED_ENVIRONMENT_RESOURCE_TYPE, CONTAINER_APPS_RP
+from ._decorator_utils import list_resource_locations
 from ._models import ConnectedEnvironment as ConnectedEnvironmentModel, ExtendedLocation as ExtendedLocationModel
 from ._utils import (get_cluster_extension, get_custom_location, _get_azext_containerapp_module)
 
 
-class BaseResource:
-    def __init__(
-        self, cmd: AzCliCommand, client: Any, raw_parameters: Dict, models: str
-    ):
-        self.raw_param = raw_parameters
-        self.cmd = cmd
-        self.client = client
-        self.models = models
-        self.azext_default_utils = _get_azext_containerapp_module("azext_containerapp._utils")
-
-    def register_provider(self, *rp_name_list):
-        for rp in rp_name_list:
-            self.azext_default_utils.register_provider_if_needed(self.cmd, rp)
-
-    def validate_subscription_registered(self, *rp_name_list):
-        for rp in rp_name_list:
-            self.azext_default_utils._validate_subscription_registered(self.cmd, rp)
-
-    def list(self):
-        try:
-            if self.get_argument_resource_group_name() is None:
-                return self.client.list_by_subscription(cmd=self.cmd)
-            else:
-                return self.client.list_by_resource_group(cmd=self.cmd, resource_group_name=self.get_argument_resource_group_name())
-        except CLIError as e:
-            handle_raw_exception(e)
-
-    def show(self):
-        try:
-            return self.client.show(cmd=self.cmd, resource_group_name=self.get_argument_resource_group_name(), name=self.get_argument_name())
-        except CLIError as e:
-            handle_raw_exception(e)
-
-    def delete(self):
-        try:
-            return self.client.delete(cmd=self.cmd, name=self.get_argument_name(), resource_group_name=self.get_argument_resource_group_name(), no_wait=self.get_argument_no_wait())
-        except CLIError as e:
-            handle_raw_exception(e)
-
-    def _list_resource_locations(self, resource_type):
-        providers_client = providers_client_factory(self.cmd.cli_ctx, get_subscription_id(self.cmd.cli_ctx))
-        resource_types = getattr(providers_client.get(CONTAINER_APPS_RP), 'resource_types', [])
-        res_locations = []
-        for res in resource_types:
-            if res and getattr(res, 'resource_type', "") == resource_type:
-                res_locations = getattr(res, 'locations', [])
-
-        res_locations = [res_loc.lower().replace(" ", "").replace("(", "").replace(")", "") for res_loc in res_locations if res_loc.strip()]
-
-        return res_locations
-
-    def get_param(self, key) -> Any:
-        return self.raw_param.get(key)
-
-    def set_param(self, key, value):
-        self.raw_param[key] = value
-
-    def get_argument_name(self):
-        return self.get_param("name")
-
-    def get_argument_resource_group_name(self):
-        return self.get_param("resource_group_name")
-
-    def get_argument_no_wait(self):
-        return self.get_param("no_wait")
-
-    def get_argument_custom_location(self):
-        return self.get_param("custom_location")
-
-    def get_argument_location(self):
-        return self.get_param("location")
-
-    def get_argument_tags(self):
-        return self.get_param("tags")
-
-    def get_argument_static_ip(self):
-        return self.get_param("static_ip")
-
-    def get_argument_dapr_ai_connection_string(self):
-        return self.get_param("dapr_ai_connection_string")
-
-    def set_argument_location(self, location):
-        self.set_param("location", location)
-
-
-class ConnectedEnvironmentDecorator(BaseResource):
+class ConnectedEnvironmentDecorator(_get_azext_containerapp_module("azext_containerapp.base_resource").BaseResource):
     def __init__(
         self, cmd: AzCliCommand, client: Any, raw_parameters: Dict, models: str, resource_type: str
     ):
         super().__init__(cmd, client, raw_parameters, models)
         self.resource_type = resource_type
+        self.azext_default_utils = _get_azext_containerapp_module("azext_containerapp._utils")
 
     def list(self):
         connected_envs = super().list()
@@ -118,7 +33,7 @@ class ConnectedEnvironmentDecorator(BaseResource):
         return connected_envs
 
     def _validate_environment_location_and_set_default_location(self):
-        res_locations = self._list_resource_locations(self.resource_type)
+        res_locations = list_resource_locations(self.cmd.cli_ctx, self.resource_type)
 
         allowed_locs = ", ".join(res_locations)
 
@@ -127,9 +42,7 @@ class ConnectedEnvironmentDecorator(BaseResource):
                 self.azext_default_utils._ensure_location_allowed(self.cmd, self.get_argument_location(), CONTAINER_APPS_RP, CONNECTED_ENVIRONMENT_RESOURCE_TYPE)
 
             except Exception as e:  # pylint: disable=broad-except
-                raise ValidationError(
-                    "You cannot create a Containerapp connected environment in location {}. List of eligible locations: {}.".format(
-                        self.get_argument_location(), allowed_locs)) from e
+                raise ValidationError("You cannot create a Containerapp connected environment in location {}. List of eligible locations: {}.".format(self.get_argument_location(), allowed_locs)) from e
         else:
             self.set_argument_location(res_locations[0])
 
@@ -151,6 +64,24 @@ class ConnectedEnvironmentDecorator(BaseResource):
                 break
         if not check_extension_type:
             raise ValidationError('There is no Microsoft.App.Environment extension found associated with custom location {}'.format(custom_location))
+
+    def get_argument_custom_location(self):
+        return self.get_param("custom_location")
+
+    def get_argument_location(self):
+        return self.get_param("location")
+
+    def get_argument_tags(self):
+        return self.get_param("tags")
+
+    def get_argument_static_ip(self):
+        return self.get_param("static_ip")
+
+    def get_argument_dapr_ai_connection_string(self):
+        return self.get_param("dapr_ai_connection_string")
+
+    def set_argument_location(self, location):
+        self.set_param("location", location)
 
 
 class ConnectedEnvironmentPreviewCreateDecorator(ConnectedEnvironmentDecorator):
