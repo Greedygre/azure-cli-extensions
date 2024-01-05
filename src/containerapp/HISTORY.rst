@@ -4,6 +4,7 @@ Release History
 ===============
 upcoming
 ++++++
+* 'az containerapp env storage set': Support Create managed environment storage with NFS Azure File.
 
 0.3.46
 ++++++
