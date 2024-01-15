@@ -593,10 +593,14 @@ class ContainerappEnvScenarioTest(ScenarioTest):
         vnet = self.create_random_name(prefix='name', length=24)
         infra_rg = self.create_random_name(prefix='irg', length=24)
 
-        self.cmd(f"az network vnet create --address-prefixes '14.0.0.0/23' -g {resource_group} -n {vnet}")
+        vnet_location = TEST_LOCATION
+        if format_location(vnet_location) == format_location(STAGE_LOCATION):
+            vnet_location = "centralus"
+
+        self.cmd(f"az network vnet create --address-prefixes '14.0.0.0/23' -g {resource_group} -n {vnet} --location {vnet_location}")
         sub_id = self.cmd(f"az network vnet subnet create --address-prefixes '14.0.0.0/23' --delegations Microsoft.App/environments -n sub -g {resource_group} --vnet-name {vnet}").get_output_in_json()["id"]
 
-        self.cmd(f'containerapp env create -g {resource_group} -n {env} -s {sub_id} -i {infra_rg} --enable-workload-profiles true')
+        self.cmd(f'containerapp env create -g {resource_group} -n {env} -s {sub_id} -i {infra_rg} --enable-workload-profiles true --logs-destination none')
 
         containerapp_env = self.cmd(f'containerapp env show -g {resource_group} -n {env}').get_output_in_json()
 
