@@ -732,6 +732,9 @@ helps['containerapp env storage set'] = """
     type: command
     short-summary: Create or update a storage.
     examples:
+    - name: Create a storage.
+      text: |
+          az containerapp env storage set -g MyResourceGroup -n MyEnv --storage-name MyStorageName --access-mode ReadOnly --azure-file-account-key MyAccountKey --azure-file-account-name MyAccountName --azure-file-share-name MyShareName
     - name: Create a azure file storage.
       text: |
           az containerapp env storage set -g MyResourceGroup -n MyEnv --storage-name MyStorageName --access-mode ReadOnly --azure-file-account-key MyAccountKey --azure-file-account-name MyAccountName --azure-file-share-name MyShareName
