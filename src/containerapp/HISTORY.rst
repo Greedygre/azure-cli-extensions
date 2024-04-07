@@ -4,6 +4,9 @@ Release History
 ===============
 upcoming
 ++++++
+
+0.3.51
+++++++
 * 'az containerapp up/create/update': Wait longer time for logstream of Cloud Build to make sure the container start
 
 0.3.50
